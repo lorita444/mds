@@ -69,6 +69,14 @@ const verifyToken = (req, res, next) => {
 };
 
 // -- Rute Materiale --
+
+app.get('/api/materials', verifyToken, (req, res) => {
+    db.all(`SELECT id, filename, uploaded_at, summary, study_time FROM materials WHERE user_id = ? ORDER BY uploaded_at DESC`, [req.user.id], (err, rows) => {
+        if (err) return res.status(500).json({ error: 'Eroare la preluarea materialelor' });
+        res.json({ materials: rows });
+    });
+});
+
 app.post('/api/upload', verifyToken, upload.single('file'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: 'Niciun fișier încărcat.' });
@@ -87,9 +95,43 @@ app.post('/api/upload', verifyToken, upload.single('file'), async (req, res) => 
         // Curățare fișier temporar
         fs.unlinkSync(req.file.path);
 
-        db.run(`INSERT INTO materials (user_id, filename, content) VALUES (?, ?, ?)`, [req.user.id, req.file.originalname, content], function(err) {
+        // -- Integrare Ollama --
+        let summary = "Generarea rezumatului a eșuat. Verifică dacă Ollama este pornit.";
+        let study_time = "N/A";
+
+        try {
+            const prompt = `Analizează acest text dintr-un curs. 
+Răspunde STRICT în format JSON cu următoarele chei: "summary" (un rezumat bine structurat, pe scurt, în limba română) și "study_time" (un string cu estimarea timpului de studiu în minute, ex: "45 minute", în română).
+Dacă textul este prea scurt, estimează cel puțin 5 minute.
+Text: ${content.substring(0, 4000)}`;
+
+            const ollamaRes = await fetch('http://127.0.0.1:11434/api/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model: 'llama3', // modelul implicit
+                    prompt: prompt,
+                    stream: false,
+                    format: 'json'
+                })
+            });
+
+            if (ollamaRes.ok) {
+                const ollamaData = await ollamaRes.json();
+                const responseJson = JSON.parse(ollamaData.response);
+                summary = responseJson.summary || summary;
+                study_time = responseJson.study_time || study_time;
+            } else {
+                console.error("Ollama HTTP Error:", ollamaRes.status);
+            }
+        } catch (e) {
+            console.error("Eroare conectare Ollama:", e.message);
+        }
+
+        db.run(`INSERT INTO materials (user_id, filename, content, summary, study_time) VALUES (?, ?, ?, ?, ?)`, 
+            [req.user.id, req.file.originalname, content, summary, study_time], function(err) {
             if (err) return res.status(500).json({ error: 'Eroare la salvarea materialului în DB.' });
-            res.json({ message: 'Material încărcat și procesat cu succes!', materialId: this.lastID });
+            res.json({ message: 'Material încărcat și analizat cu AI!', materialId: this.lastID });
         });
 
     } catch (error) {

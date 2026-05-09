@@ -254,3 +254,30 @@ header {
 .file-input {
   display: none;
 }
+
+.fab-button {
+  position: fixed;
+  bottom: 2.5rem;
+  right: 2.5rem;
+  width: 65px;
+  height: 65px;
+  background-color: var(--primary-color);
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.5rem;
+  font-weight: 300;
+  box-shadow: 0 4px 20px rgba(158, 138, 120, 0.4);
+  cursor: pointer;
+  border: none;
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  z-index: 1000;
+}
+
+.fab-button:hover {
+  background-color: var(--primary-hover);
+  transform: scale(1.1) translateY(-2px);
+  box-shadow: 0 8px 30px rgba(158, 138, 120, 0.6);
+}

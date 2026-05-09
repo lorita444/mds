@@ -21,6 +21,8 @@ const db = new sqlite3.Database(dbPath, (err) => {
             user_id INTEGER,
             filename TEXT,
             content TEXT,
+            summary TEXT,
+            study_time TEXT,
             uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY(user_id) REFERENCES users(id)
         )`);

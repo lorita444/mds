@@ -3,19 +3,63 @@ import React, { useState, useRef, useEffect } from 'react';
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
-  const [authMode, setAuthMode] = useState('login'); // 'login' or 'signup'
+  const [authMode, setAuthMode] = useState('login');
   
   const [activeTab, setActiveTab] = useState('home');
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
   const [authError, setAuthError] = useState('');
+  
+  const [materials, setMaterials] = useState([]);
+  
   const fileInputRef = useRef(null);
 
   // Form fields
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+
+  // Timer state
+  const [timerMinutes, setTimerMinutes] = useState(25);
+  const [timeLeft, setTimeLeft] = useState(0);
+  const [isTimerRunning, setIsTimerRunning] = useState(false);
+  const [activeMaterialForTimer, setActiveMaterialForTimer] = useState(null);
+
+  useEffect(() => {
+    let interval = null;
+    if (isTimerRunning && timeLeft > 0) {
+      interval = setInterval(() => setTimeLeft(t => t - 1), 1000);
+    } else if (timeLeft === 0 && isTimerRunning) {
+      setIsTimerRunning(false);
+      alert('Sesiunea de studiu a fost finalizată! 🎉 Acum ești gata pentru quiz-uri.');
+    }
+    return () => clearInterval(interval);
+  }, [isTimerRunning, timeLeft]);
+
+  const startTimer = (mins) => {
+    setTimeLeft(mins * 60);
+    setIsTimerRunning(true);
+  };
+  
+  const stopTimer = () => {
+    setIsTimerRunning(false);
+    setTimeLeft(0);
+  };
+
+  const fetchMaterials = async (token) => {
+    try {
+      const response = await fetch('http://localhost:3000/api/materials', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setMaterials(data.materials || []);
+      }
+    } catch (err) {
+      console.error('Eroare la preluarea materialelor:', err);
+    }
+  };
 
   // Check local storage on initial load
   useEffect(() => {
@@ -24,6 +68,7 @@ function App() {
     if (token && savedUser) {
       setIsAuthenticated(true);
       setUser(JSON.parse(savedUser));
+      fetchMaterials(token);
     }
   }, []);
 
@@ -47,7 +92,12 @@ function App() {
         localStorage.setItem('user', JSON.stringify(data.user));
         setIsAuthenticated(true);
         setUser(data.user);
-        setActiveTab('profile'); // redirect to profile after successful login
+        
+        // Fetch materials immediately after login
+        await fetchMaterials(data.token);
+        
+        // Redirect to city
+        setActiveTab('city'); 
       } else {
         setAuthError(data.error || 'A apărut o eroare.');
       }
@@ -61,6 +111,7 @@ function App() {
     localStorage.removeItem('user');
     setIsAuthenticated(false);
     setUser(null);
+    setMaterials([]);
     setActiveTab('home');
   };
 
@@ -117,6 +168,7 @@ function App() {
       if (response.ok) {
         setMessage({ type: 'success', text: 'Material încărcat cu succes!' });
         setFile(null);
+        await fetchMaterials(token); // update the list
       } else {
         setMessage({ type: 'error', text: data.error || 'A apărut o eroare la încărcare.' });
       }
@@ -261,10 +313,32 @@ function App() {
         {activeTab === 'city' && isAuthenticated && (
           <div className="card">
             <h2>Orașul tău</h2>
-            <p>Aici va fi afișat progresul tău sub forma unui oraș pe care îl construiești din cunoștințe.</p>
-            <div style={{ height: '200px', backgroundColor: 'var(--bg-main)', border: '1px solid var(--accent-beige)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span style={{ fontSize: '3rem' }}>🏗️</span>
-            </div>
+            
+            {materials.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '3rem 0' }}>
+                <div style={{ fontSize: '4rem', marginBottom: '1rem', opacity: '0.7' }}>🏙️</div>
+                <p style={{ marginBottom: '2rem', fontSize: '1.1rem' }}>
+                  Încă nu ai construit nicio clădire. Pentru a începe extinderea orașului, 
+                  trebuie să încarci un curs și să rezolvi quiz-urile!
+                </p>
+                <button 
+                  className="primary-btn" 
+                  style={{ width: 'auto' }}
+                  onClick={() => setActiveTab('profile')}
+                >
+                  Încarcă primul tău fișier
+                </button>
+              </div>
+            ) : (
+              <>
+                <p>Acesta este progresul tău de până acum. Continuă să înveți pentru a debloca clădiri noi!</p>
+                <div style={{ height: '300px', backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--accent-beige)', borderRadius: '16px', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: '1rem' }}>
+                  <span style={{ fontSize: '4rem', margin: '0 10px' }}>🏠</span>
+                  {materials.length > 1 && <span style={{ fontSize: '5rem', margin: '0 10px' }}>🏢</span>}
+                  {materials.length > 2 && <span style={{ fontSize: '6rem', margin: '0 10px' }}>🏦</span>}
+                </div>
+              </>
+            )}
           </div>
         )}
 
@@ -313,9 +387,92 @@ function App() {
                 {message.text}
               </p>
             )}
+
+            {materials.length > 0 && (
+              <div style={{ marginTop: '3rem' }}>
+                <h3 style={{ marginBottom: '1.5rem', borderBottom: '1px solid var(--accent-beige)', paddingBottom: '0.5rem' }}>Materialele Tale</h3>
+                <ul style={{ listStyleType: 'none', padding: 0 }}>
+                  {materials.map((mat) => (
+                    <li key={mat.id} style={{ padding: '1.5rem', backgroundColor: 'var(--bg-secondary)', marginBottom: '1rem', borderRadius: '16px', border: '1px solid var(--accent-beige)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                        <span style={{ fontSize: '1.1rem' }}>📄 <strong>{mat.filename}</strong></span>
+                        <span style={{ fontSize: '0.9rem', color: 'var(--primary-color)', fontWeight: '600', backgroundColor: 'var(--bg-main)', padding: '0.4rem 0.8rem', borderRadius: '20px', border: '1px solid var(--accent-beige)' }}>
+                          ⏱️ Estimat: {mat.study_time || 'N/A'}
+                        </span>
+                      </div>
+                      
+                      {mat.summary && (
+                        <div style={{ marginTop: '1rem', padding: '1rem', backgroundColor: 'var(--bg-main)', borderRadius: '12px', border: '1px solid var(--accent-beige)' }}>
+                          <strong style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-main)' }}>✨ Rezumat AI:</strong>
+                          <p style={{ fontSize: '0.95rem', color: 'var(--text-muted)', lineHeight: '1.5', marginBottom: '1.5rem' }}>{mat.summary}</p>
+                          
+                          {activeMaterialForTimer === mat.id ? (
+                            <div style={{ padding: '1rem', backgroundColor: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--accent-beige)' }}>
+                              <h4 style={{ marginBottom: '0.8rem', color: 'var(--primary-color)' }}>⏳ Sesiune de studiu</h4>
+                              {!isTimerRunning && timeLeft === 0 ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                  <label style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>Timp (minute):</label>
+                                  <input 
+                                    type="number" 
+                                    value={timerMinutes} 
+                                    onChange={(e) => setTimerMinutes(Number(e.target.value))} 
+                                    style={{ padding: '0.5rem', borderRadius: '8px', border: '1px solid var(--accent-beige)', width: '70px', textAlign: 'center' }}
+                                  />
+                                  <button className="primary-btn" style={{ padding: '0.5rem 1rem', width: 'auto' }} onClick={() => startTimer(timerMinutes)}>Start</button>
+                                  <button style={{ padding: '0.5rem 1rem', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', textDecoration: 'underline' }} onClick={() => setActiveMaterialForTimer(null)}>Închide</button>
+                                </div>
+                              ) : (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                                  <span style={{ fontSize: '2rem', fontWeight: 'bold', color: 'var(--primary-color)', fontFamily: 'monospace' }}>
+                                    {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
+                                  </span>
+                                  {isTimerRunning ? (
+                                    <button className="primary-btn" style={{ background: '#ef4444', padding: '0.5rem 1rem', width: 'auto' }} onClick={stopTimer}>Oprește</button>
+                                  ) : (
+                                    <span style={{ color: '#10b981', fontWeight: 'bold', fontSize: '1.1rem' }}>Sesiune finalizată! 🎉</span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <button 
+                              className="primary-btn" 
+                              style={{ padding: '0.6rem 1.2rem', fontSize: '0.9rem', width: 'auto', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-main)', border: '1px solid var(--accent-beige)', boxShadow: 'none' }}
+                              onClick={() => {
+                                setActiveMaterialForTimer(mat.id);
+                                const est = parseInt(mat.study_time) || 25;
+                                setTimerMinutes(est);
+                                setTimeLeft(0);
+                                setIsTimerRunning(false);
+                              }}
+                            >
+                              📚 Începe Sesiunea de Studiu
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      
+                      <div style={{ marginTop: '1rem', fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'right' }}>
+                        Adăugat pe: {new Date(mat.uploaded_at).toLocaleDateString()}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         )}
       </main>
+
+      {isAuthenticated && (
+        <button 
+          className="fab-button" 
+          onClick={() => setActiveTab('profile')}
+          title="Încarcă un fișier nou"
+        >
+          +
+        </button>
+      )}
     </div>
   );
 }
