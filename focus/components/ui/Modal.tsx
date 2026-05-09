@@ -1,0 +1,120 @@
+import {
+  Modal as RNModal,
+  View,
+  Text,
+  Pressable,
+  ScrollView,
+} from 'react-native';
+import { colors, radius, spacing, typography } from '../../utils/theme';
+
+type ModalProps = {
+  visible: boolean;
+  onClose: () => void;
+  title?: string;
+  children: React.ReactNode;
+  showCloseButton?: boolean;
+  scrollable?: boolean;
+};
+
+export function Modal({
+  visible,
+  onClose,
+  title,
+  children,
+  showCloseButton = true,
+  scrollable = false,
+}: ModalProps) {
+  const Content = scrollable ? ScrollView : View;
+
+  return (
+    <RNModal
+      visible={visible}
+      transparent
+      animationType="slide"
+      statusBarTranslucent
+      onRequestClose={onClose}
+    >
+      <Pressable
+        onPress={onClose}
+        style={{
+          flex: 1,
+          backgroundColor: colors.bg.overlay,
+          justifyContent: 'flex-end',
+        }}
+      >
+        <Pressable
+          style={{
+            backgroundColor: colors.bg.elevated,
+            borderTopLeftRadius: radius.xxl,
+            borderTopRightRadius: radius.xxl,
+            borderTopWidth: 1,
+            borderTopColor: colors.bg.cardBorder,
+            borderLeftWidth: 1,
+            borderLeftColor: colors.bg.cardBorder,
+            borderRightWidth: 1,
+            borderRightColor: colors.bg.cardBorder,
+            paddingTop: spacing.md,
+            paddingBottom: spacing.xxl,
+          }}
+        >
+          {/* Drag handle */}
+          <View
+            style={{
+              width: 40,
+              height: 4,
+              backgroundColor: colors.text.dim,
+              borderRadius: radius.full,
+              alignSelf: 'center',
+              marginBottom: spacing.md,
+            }}
+          />
+
+          {(title || showCloseButton) && (
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                paddingHorizontal: spacing.lg,
+                marginBottom: spacing.md,
+              }}
+            >
+              {title && (
+                <Text
+                  style={{
+                    color: colors.text.primary,
+                    fontSize: typography.sizes.lg,
+                    fontWeight: typography.weights.bold,
+                  }}
+                >
+                  {title}
+                </Text>
+              )}
+              {showCloseButton && (
+                <Pressable
+                  onPress={onClose}
+                  style={{
+                    backgroundColor: colors.bg.card,
+                    borderRadius: radius.full,
+                    width: 32,
+                    height: 32,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Text style={{ color: colors.text.secondary, fontSize: 16 }}>
+                    ×
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+          )}
+
+          <Content style={scrollable ? { maxHeight: 480 } : undefined}>
+            {children}
+          </Content>
+        </Pressable>
+      </Pressable>
+    </RNModal>
+  );
+}
