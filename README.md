@@ -1,4 +1,5 @@
-# Focus este o aplicație educațională de tip Tower Defense care transformă procesul de învățare într-o bătălie pentru supraviețuirea galaxiei. În loc să citești cursuri în mod pasiv, folosești informația ca resursă pentru a respinge o invazie extraterestră.
+# Focus 
+## Este o aplicație educațională de tip Tower Defense care transformă procesul de învățare într-o bătălie pentru supraviețuirea galaxiei. În loc să citești cursuri în mod pasiv, folosești informația ca resursă pentru a respinge o invazie extraterestră.
 
 ## Cum funcționează:
 
