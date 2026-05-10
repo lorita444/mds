@@ -14,6 +14,7 @@ type AuthContextValue = {
   user: User | null;
   profile: UserProfile | null;
   loading: boolean;
+  loadingMessage: string;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 };
@@ -24,6 +25,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMessage, setLoadingMessage] = useState('Checking your session...');
 
   const fetchProfile = async (userId: string) => {
     const { data } = await supabase
@@ -44,6 +46,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session?.user.id) {
+        setLoadingMessage('Loading your profile...');
         fetchProfile(session.user.id).finally(() => setLoading(false));
       } else {
         setLoading(false);
@@ -75,6 +78,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         user: session?.user ?? null,
         profile,
         loading,
+        loadingMessage,
         signOut,
         refreshProfile,
       }}

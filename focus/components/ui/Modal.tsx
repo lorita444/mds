@@ -4,6 +4,8 @@ import {
   Text,
   Pressable,
   ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { colors, radius, spacing, typography } from '../../utils/theme';
 
@@ -34,6 +36,7 @@ export function Modal({
       statusBarTranslucent
       onRequestClose={onClose}
     >
+      {/* Backdrop — tap to dismiss */}
       <Pressable
         onPress={onClose}
         style={{
@@ -42,78 +45,87 @@ export function Modal({
           justifyContent: 'flex-end',
         }}
       >
-        <Pressable
-          style={{
-            backgroundColor: colors.bg.elevated,
-            borderTopLeftRadius: radius.xxl,
-            borderTopRightRadius: radius.xxl,
-            borderTopWidth: 1,
-            borderTopColor: colors.bg.cardBorder,
-            borderLeftWidth: 1,
-            borderLeftColor: colors.bg.cardBorder,
-            borderRightWidth: 1,
-            borderRightColor: colors.bg.cardBorder,
-            paddingTop: spacing.md,
-            paddingBottom: spacing.xxl,
-          }}
+        {/* KeyboardAvoidingView wraps the sheet so it lifts when keyboard opens */}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
-          {/* Drag handle */}
-          <View
+          {/* Inner pressable stops backdrop tap from closing when touching sheet */}
+          <Pressable
             style={{
-              width: 40,
-              height: 4,
-              backgroundColor: colors.text.dim,
-              borderRadius: radius.full,
-              alignSelf: 'center',
-              marginBottom: spacing.md,
+              backgroundColor: colors.bg.elevated,
+              borderTopLeftRadius: radius.xxl,
+              borderTopRightRadius: radius.xxl,
+              borderTopWidth: 1,
+              borderTopColor: colors.bg.cardBorder,
+              borderLeftWidth: 1,
+              borderLeftColor: colors.bg.cardBorder,
+              borderRightWidth: 1,
+              borderRightColor: colors.bg.cardBorder,
+              paddingTop: spacing.md,
+              paddingBottom: spacing.xl + 8,
             }}
-          />
-
-          {(title || showCloseButton) && (
+          >
+            {/* Drag handle */}
             <View
               style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                paddingHorizontal: spacing.lg,
+                width: 40,
+                height: 4,
+                backgroundColor: colors.text.dim,
+                borderRadius: radius.full,
+                alignSelf: 'center',
                 marginBottom: spacing.md,
               }}
-            >
-              {title && (
-                <Text
-                  style={{
-                    color: colors.text.primary,
-                    fontSize: typography.sizes.lg,
-                    fontWeight: typography.weights.bold,
-                  }}
-                >
-                  {title}
-                </Text>
-              )}
-              {showCloseButton && (
-                <Pressable
-                  onPress={onClose}
-                  style={{
-                    backgroundColor: colors.bg.card,
-                    borderRadius: radius.full,
-                    width: 32,
-                    height: 32,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <Text style={{ color: colors.text.secondary, fontSize: 16 }}>
-                    ×
-                  </Text>
-                </Pressable>
-              )}
-            </View>
-          )}
+            />
 
-          <Content style={scrollable ? { maxHeight: 480 } : undefined}>
-            {children}
-          </Content>
-        </Pressable>
+            {(title || showCloseButton) && (
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  paddingHorizontal: spacing.lg,
+                  marginBottom: spacing.md,
+                }}
+              >
+                {title && (
+                  <Text
+                    style={{
+                      color: colors.text.primary,
+                      fontSize: typography.sizes.lg,
+                      fontWeight: typography.weights.bold,
+                    }}
+                  >
+                    {title}
+                  </Text>
+                )}
+                {showCloseButton && (
+                  <Pressable
+                    onPress={onClose}
+                    hitSlop={12}
+                    style={{
+                      backgroundColor: colors.bg.card,
+                      borderWidth: 1,
+                      borderColor: colors.bg.cardBorder,
+                      borderRadius: radius.full,
+                      width: 34,
+                      height: 34,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Text style={{ color: colors.text.secondary, fontSize: 18, lineHeight: 20 }}>
+                      ×
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
+            )}
+
+            <Content style={scrollable ? { maxHeight: 480 } : undefined}>
+              {children}
+            </Content>
+          </Pressable>
+        </KeyboardAvoidingView>
       </Pressable>
     </RNModal>
   );

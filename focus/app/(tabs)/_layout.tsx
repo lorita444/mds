@@ -1,76 +1,36 @@
 import { Tabs } from 'expo-router';
-import { Text, View } from 'react-native';
-import { colors, radius } from '../../utils/theme';
+import { Ionicons } from '@expo/vector-icons';
+import { colors } from '../../utils/theme';
 
-type TabIconProps = {
-  emoji: string;
-  focused: boolean;
-  label: string;
-};
-
-function TabIcon({ emoji, focused, label }: TabIconProps) {
-  return (
-    <View
-      style={{
-        alignItems: 'center',
-        gap: 2,
-        paddingTop: 4,
-      }}
-    >
-      <View
-        style={{
-          width: 40,
-          height: 32,
-          alignItems: 'center',
-          justifyContent: 'center',
-          borderRadius: radius.md,
-          backgroundColor: focused ? colors.cosmic.purpleFaint : 'transparent',
-        }}
-      >
-        <Text style={{ fontSize: 20 }}>{emoji}</Text>
-      </View>
-      <Text
-        style={{
-          fontSize: 10,
-          fontWeight: focused ? '600' : '400',
-          color: focused ? colors.cosmic.purpleLight : colors.text.muted,
-        }}
-      >
-        {label}
-      </Text>
-    </View>
-  );
-}
+type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
 
 export default function TabsLayout() {
   return (
     <Tabs
+      initialRouteName="studyverse"
       screenOptions={{
         headerShown: false,
+        tabBarShowLabel: false,
         tabBarStyle: {
           backgroundColor: colors.bg.elevated,
           borderTopWidth: 1,
-          borderTopColor: colors.bg.cardBorder,
-          height: 72,
+          borderTopColor: 'rgba(139,92,246,0.14)',
+          height: 56,
           paddingBottom: 8,
-          paddingTop: 4,
+          paddingTop: 8,
+          elevation: 0,
         },
-        tabBarShowLabel: false,
       }}
     >
       <Tabs.Screen
-        name="index"
+        name="studyverse"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon emoji="🏠" focused={focused} label="Home" />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="universe"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabIcon emoji="🌌" focused={focused} label="Universe" />
+            <Ionicons
+              name={(focused ? 'planet' : 'planet-outline') as IoniconsName}
+              size={26}
+              color={focused ? colors.text.primary : colors.text.muted}
+            />
           ),
         }}
       />
@@ -78,15 +38,23 @@ export default function TabsLayout() {
         name="portfolio"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon emoji="📚" focused={focused} label="Portfolio" />
+            <Ionicons
+              name={(focused ? 'library' : 'library-outline') as IoniconsName}
+              size={26}
+              color={focused ? colors.text.primary : colors.text.muted}
+            />
           ),
         }}
       />
       <Tabs.Screen
-        name="coop"
+        name="friend"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon emoji="🤝" focused={focused} label="Co-op" />
+            <Ionicons
+              name={(focused ? 'people' : 'people-outline') as IoniconsName}
+              size={26}
+              color={focused ? colors.text.primary : colors.text.muted}
+            />
           ),
         }}
       />
@@ -94,10 +62,19 @@ export default function TabsLayout() {
         name="profile"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon emoji="👤" focused={focused} label="Profile" />
+            <Ionicons
+              name={(focused ? 'person-circle' : 'person-circle-outline') as IoniconsName}
+              size={26}
+              color={focused ? colors.text.primary : colors.text.muted}
+            />
           ),
         }}
       />
+
+      {/* Hidden routes — not shown in navbar */}
+      <Tabs.Screen name="universe" options={{ href: null }} />
+      <Tabs.Screen name="coop" options={{ href: null }} />
+      <Tabs.Screen name="index" options={{ href: null }} />
     </Tabs>
   );
 }

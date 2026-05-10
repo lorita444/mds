@@ -495,7 +495,7 @@ export default function CoopRoomScreen() {
         {allCompleted && (
           <Button
             label="View Reward"
-            onPress={() => router.replace('/(tabs)' as never)}
+            onPress={() => router.replace('/(tabs)/studyverse' as never)}
             size="lg"
             fullWidth
           />

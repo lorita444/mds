@@ -366,7 +366,7 @@ export default function RewardRevealScreen() {
         {hasItem && (
           <Button
             label="View in Universe"
-            onPress={() => router.replace('/(tabs)/universe' as never)}
+            onPress={() => router.replace('/(tabs)/studyverse' as never)}
             size="lg"
             fullWidth
           />
@@ -374,7 +374,7 @@ export default function RewardRevealScreen() {
         <Button
           label={hasItem ? 'Back to Home' : 'Continue'}
           variant={hasItem ? 'ghost' : 'primary'}
-          onPress={() => router.replace('/(tabs)' as never)}
+          onPress={() => router.replace('/(tabs)/studyverse' as never)}
           size="lg"
           fullWidth
         />

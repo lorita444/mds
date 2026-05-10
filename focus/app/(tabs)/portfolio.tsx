@@ -43,7 +43,7 @@ export default function PortfolioScreen() {
 
   // Color/emoji state outside the form (not text inputs)
   const [selectedColor, setSelectedColor] = useState(SUBJECT_COLORS[0]);
-  const [selectedEmoji, setSelectedEmoji] = useState(SUBJECT_EMOJIS[0]);
+  const [selectedEmoji, setSelectedEmoji] = useState<string | null>(null);
 
   const {
     control,
@@ -78,7 +78,7 @@ export default function PortfolioScreen() {
       values.name,
       values.description || undefined,
       selectedColor,
-      selectedEmoji,
+      selectedEmoji ?? '',
     );
     if (result.error) {
       toast(result.error, 'error');
@@ -94,7 +94,7 @@ export default function PortfolioScreen() {
     setShowCreate(false);
     reset();
     setSelectedColor(SUBJECT_COLORS[0]);
-    setSelectedEmoji(SUBJECT_EMOJIS[0]);
+    setSelectedEmoji(null);
   };
 
   const handleDelete = (s: Subject) => {
@@ -209,7 +209,13 @@ export default function PortfolioScreen() {
                   justifyContent: 'center',
                 }}
               >
-                <Text style={{ fontSize: 26 }}>{s.emoji}</Text>
+                {s.emoji ? (
+                  <Text style={{ fontSize: 26 }}>{s.emoji}</Text>
+                ) : (
+                  <Text style={{ fontSize: 22, fontWeight: '700', color: s.color }}>
+                    {s.name.charAt(0).toUpperCase()}
+                  </Text>
+                )}
               </View>
               <View style={{ flex: 1, gap: 3 }}>
                 <Text style={{ color: colors.text.primary, fontSize: typography.sizes.md, fontWeight: typography.weights.semibold }}>
@@ -306,6 +312,24 @@ export default function PortfolioScreen() {
               Icon
             </Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.xs }}>
+              {/* None tile */}
+              <Pressable
+                onPress={() => setSelectedEmoji(null)}
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: radius.sm,
+                  backgroundColor: selectedEmoji === null ? colors.cosmic.purpleFaint : colors.bg.card,
+                  borderWidth: 1.5,
+                  borderColor: selectedEmoji === null ? colors.cosmic.purpleGlow : colors.bg.cardBorder,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Text style={{ fontSize: 13, fontWeight: '600', color: selectedEmoji === null ? colors.cosmic.purpleLight : colors.text.muted }}>
+                  Aa
+                </Text>
+              </Pressable>
               {SUBJECT_EMOJIS.map((e) => (
                 <Pressable
                   key={e}

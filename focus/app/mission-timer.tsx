@@ -133,7 +133,7 @@ export default function MissionTimerScreen() {
             if (intervalRef.current) clearInterval(intervalRef.current);
             const elapsed = Math.round((Date.now() - sessionStartRef.current) / 1000);
             try { await abandonSession(sessionId, elapsed); } catch {}
-            router.replace('/(tabs)' as never);
+            router.replace('/(tabs)/studyverse' as never);
           },
         },
       ],
