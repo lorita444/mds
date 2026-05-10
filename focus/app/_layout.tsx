@@ -21,10 +21,13 @@ function RootNavigation({ assetsReady }: { assetsReady: boolean }) {
 
   useEffect(() => {
     if (loading || !assetsReady) return;
-    const inAuthGroup = (segments as string[])[0] === '(auth)';
+    const segs = segments as string[];
+    const inAuthGroup = segs[0] === '(auth)';
+    const onWelcomePage = segs[0] === '(auth)' && segs[1] === 'welcome';
     if (!session && !inAuthGroup) {
       router.replace('/(auth)/onboarding' as never);
-    } else if (session && inAuthGroup) {
+    } else if (session && inAuthGroup && !onWelcomePage) {
+      // Don't redirect away from welcome — user just signed up
       router.replace('/(tabs)/studyverse' as never);
     }
   }, [session, loading, assetsReady, segments, router]);

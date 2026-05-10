@@ -51,6 +51,7 @@ export default function SignupScreen() {
   const confirmRef = useRef<TextInput>(null);
 
   const [loadingMsg, setLoadingMsg] = useState(SIGNUP_MESSAGES[0]);
+  const [needsConfirm, setNeedsConfirm] = useState(false);
 
   const {
     control,
@@ -83,8 +84,16 @@ export default function SignupScreen() {
 
     if (error) {
       setError('root', { message: mapAuthError(error.message) });
+      return;
     }
-    // onAuthStateChange fires on success and redirects automatically
+
+    if (data.session) {
+      router.replace('/(auth)/welcome' as never);
+    } else if (data.user && !data.session) {
+      setNeedsConfirm(true);
+    } else {
+      router.replace('/(auth)/welcome' as never);
+    }
   };
 
   return (
@@ -101,7 +110,6 @@ export default function SignupScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Header */}
           <View style={styles.header}>
             <Image source={APP_ICON} style={styles.appIcon} resizeMode="contain" />
             <Text style={styles.title}>Begin your journey</Text>
@@ -110,7 +118,6 @@ export default function SignupScreen() {
             </Text>
           </View>
 
-          {/* Form */}
           <Card variant="elevated" padding={spacing.lg}>
             <View style={styles.formGap}>
               <Controller
@@ -193,6 +200,20 @@ export default function SignupScreen() {
                 </View>
               ) : null}
 
+              {needsConfirm ? (
+                <View style={[styles.errorBanner, { backgroundColor: 'rgba(13,148,136,0.12)', borderColor: 'rgba(13,148,136,0.3)' }]}>
+                  <Text style={[styles.errorText, { color: '#5eead4' }]}>
+                    ✅ Account created! Check your email to confirm your address, then sign in.
+                  </Text>
+                  <Pressable
+                    onPress={() => router.replace('/(auth)/login' as never)}
+                    style={{ marginTop: 8 }}
+                  >
+                    <Text style={{ color: '#5eead4', fontSize: 13, fontWeight: '700' }}>Go to Sign In →</Text>
+                  </Pressable>
+                </View>
+              ) : null}
+
               <Button
                 label="Create Account"
                 loadingLabel={loadingMsg}
@@ -204,7 +225,6 @@ export default function SignupScreen() {
             </View>
           </Card>
 
-          {/* Starter kit */}
           <View style={styles.starterKit}>
             <Text style={styles.starterTitle}>Your Starter Kit</Text>
             <Text style={styles.starterBody}>
@@ -212,7 +232,6 @@ export default function SignupScreen() {
             </Text>
           </View>
 
-          {/* Sign in link */}
           <Pressable
             onPress={() => router.replace('/(auth)/login' as never)}
             style={styles.centerLink}
