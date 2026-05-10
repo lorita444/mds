@@ -19,7 +19,7 @@ import {
   completeSession,
 } from '../../lib/db';
 import { supabase } from '../../lib/supabase';
-import { generateQuizFromContext } from '../../lib/openai';
+import { generateQuizFromContext } from '../../lib/ollama';
 import { colors, spacing, typography, radius } from '../../utils/theme';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';

@@ -21,7 +21,7 @@ import {
   placeWager,
   getActiveUniverseItems,
 } from '../lib/db';
-import { estimateStudyDuration } from '../lib/openai';
+import { estimateStudyDuration } from '../lib/ollama';
 import { colors, spacing, typography, radius } from '../utils/theme';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';

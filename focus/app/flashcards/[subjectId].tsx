@@ -19,7 +19,7 @@ import {
   getChapters,
   getMaterials,
 } from '../../lib/db';
-import { generateFlashcardsFromText } from '../../lib/openai';
+import { generateFlashcardsFromText } from '../../lib/ollama';
 import { supabase } from '../../lib/supabase';
 import { colors, spacing, typography, radius } from '../../utils/theme';
 import { Card } from '../../components/ui/Card';
