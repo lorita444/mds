@@ -13,6 +13,7 @@ import { colors, spacing, typography, radius } from '../utils/theme';
 import { Button } from '../components/ui/Button';
 import { TimerDisplay } from '../components/ui/TimerDisplay';
 import { Card } from '../components/ui/Card';
+import { useAuth } from '../context/auth-context';
 import {
   scheduleActiveSessionTimer,
   cancelActiveSessionNotifications,
@@ -23,6 +24,7 @@ import {
 export default function MissionTimerScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { refreshProfile } = useAuth();
   const {
     sessionId,
     plannedSeconds: plannedSecondsParam,
@@ -152,7 +154,10 @@ export default function MissionTimerScreen() {
             if (!sessionId) return;
             if (intervalRef.current) clearInterval(intervalRef.current);
             const elapsed = Math.round((Date.now() - sessionStartRef.current) / 1000);
-            try { await abandonSession(sessionId, elapsed); } catch {}
+            try { 
+              await abandonSession(sessionId, elapsed); 
+              await refreshProfile();
+            } catch {}
             router.replace('/(tabs)/studyverse' as never);
           },
         },

@@ -986,7 +986,23 @@ app.get('/api/streaks', async (req, res) => {
        ORDER BY study_date DESC`,
       [userId, sinceStr]
     );
-    res.json(rows);
+
+    // Format study_date to YYYY-MM-DD to avoid timezone/ISO string mismatch in client calendar mappings
+    const formatted = rows.map(r => {
+      let dStr = r.study_date;
+      if (dStr instanceof Date) {
+        // Adjust for timezone offset to get correct YYYY-MM-DD
+        const year = dStr.getFullYear();
+        const month = String(dStr.getMonth() + 1).padStart(2, '0');
+        const day = String(dStr.getDate()).padStart(2, '0');
+        dStr = `${year}-${month}-${day}`;
+      } else if (typeof dStr === 'string') {
+        dStr = dStr.split('T')[0];
+      }
+      return { ...r, study_date: dStr };
+    });
+
+    res.json(formatted);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

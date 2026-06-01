@@ -25,6 +25,8 @@ import { Button } from '../components/ui/Button';
 import { TimerDisplay } from '../components/ui/TimerDisplay';
 import { Card } from '../components/ui/Card';
 import { SkeletonBox } from '../components/ui/Skeleton';
+import { Modal } from '../components/ui/Modal';
+import { Input } from '../components/ui/Input';
 import type { Subject } from '../lib/types';
 
 const DURATIONS = [
@@ -47,7 +49,7 @@ const REWARD_TIERS = [
 type Phase = 'idle' | 'running' | 'paused' | 'completing';
 
 export default function CasualFocusScreen() {
-  const { user } = useAuth();
+  const { user, refreshProfile } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { subjectId: paramSubjectId } = useLocalSearchParams<{ subjectId?: string }>();
@@ -59,6 +61,29 @@ export default function CasualFocusScreen() {
   const [loadingSubjects, setLoadingSubjects] = useState(true);
   const [remaining, setRemaining] = useState(DURATIONS[2].seconds);
   const [completing, setCompleting] = useState(false);
+
+  const [showCustomModal, setShowCustomModal] = useState(false);
+  const [customMinutesInput, setCustomMinutesInput] = useState('');
+  const [customMinutesError, setCustomMinutesError] = useState('');
+
+  const handleSetCustomDuration = () => {
+    const mins = parseInt(customMinutesInput.trim(), 10);
+    if (isNaN(mins) || mins <= 0) {
+      setCustomMinutesError('Please enter a positive number of minutes.');
+      return;
+    }
+    if (mins > 720) {
+      setCustomMinutesError('Maximum duration is 720 minutes (12 hours).');
+      return;
+    }
+    setCustomMinutesError('');
+    setSelectedDuration({
+      label: `${mins}m`,
+      seconds: mins * 60,
+    });
+    setShowCustomModal(false);
+    setCustomMinutesInput('');
+  };
 
   const sessionIdRef = useRef<string | null>(null);
   const sessionStartRef = useRef<number>(0);
@@ -212,8 +237,11 @@ export default function CasualFocusScreen() {
             const elapsed = Math.round(
               (Date.now() - sessionStartRef.current - totalPausedMsRef.current) / 1000,
             );
-            try { await abandonSession(sessionIdRef.current, elapsed); } catch {}
-            router.back();
+             try { 
+               await abandonSession(sessionIdRef.current, elapsed);
+               await refreshProfile();
+             } catch {}
+             router.back();
           },
         },
       ],
@@ -288,6 +316,24 @@ export default function CasualFocusScreen() {
                 </Pressable>
               );
             })}
+            {/* Custom Duration Chip */}
+            {(() => {
+              const isCustomActive = !DURATIONS.some((d) => d.label === selectedDuration.label);
+              return (
+                <Pressable
+                  onPress={() => setShowCustomModal(true)}
+                  style={[
+                    styles.durationChip,
+                    isCustomActive && styles.durationChipActive,
+                    { backgroundColor: 'rgba(124,58,237,0.1)', borderColor: 'rgba(124,58,237,0.3)' }
+                  ]}
+                >
+                  <Text style={[styles.durationText, isCustomActive && styles.durationTextActive, { color: colors.cosmic.purpleLight }]}>
+                    {isCustomActive ? `Custom: ${selectedDuration.label}` : '+ Custom'}
+                  </Text>
+                </Pressable>
+              );
+            })()}
           </View>
         </View>
 
@@ -347,6 +393,30 @@ export default function CasualFocusScreen() {
           size="lg"
           fullWidth
         />
+
+        <Modal
+          visible={showCustomModal}
+          onClose={() => { setShowCustomModal(false); setCustomMinutesError(''); }}
+          title="Custom Duration"
+        >
+          <View style={{ paddingHorizontal: spacing.lg, gap: spacing.md, paddingBottom: spacing.md }}>
+            <Input
+              label="Duration in minutes"
+              placeholder="e.g. 50"
+              value={customMinutesInput}
+              onChangeText={(v) => { setCustomMinutesInput(v); setCustomMinutesError(''); }}
+              keyboardType="number-pad"
+              autoFocus
+              error={customMinutesError}
+            />
+            <Button
+              label="Set Duration"
+              onPress={handleSetCustomDuration}
+              fullWidth
+              size="lg"
+            />
+          </View>
+        </Modal>
       </ScrollView>
     );
   }

@@ -58,7 +58,8 @@ function StreakCalendar({ streaks }: { streaks: Streak[] }) {
         <View key={wi} style={{ flexDirection: 'row', gap: 4 }}>
           {week.map(({ dateStr, streak }) => {
             const isToday = dateStr === todayStr;
-            const bg = streak ? getStreakColor(streak.total_seconds) : colors.bg.elevated;
+            const hasStudied = !!(streak && streak.total_seconds > 0);
+            const bg = hasStudied ? getStreakColor(streak.total_seconds) : 'transparent';
             return (
               <View
                 key={dateStr}
@@ -67,8 +68,8 @@ function StreakCalendar({ streaks }: { streaks: Streak[] }) {
                   aspectRatio: 1,
                   borderRadius: 4,
                   backgroundColor: bg,
-                  borderWidth: isToday ? 1.5 : 0,
-                  borderColor: colors.cosmic.purpleLight,
+                  borderWidth: isToday ? 1.5 : (hasStudied ? 0 : 1),
+                  borderColor: isToday ? colors.cosmic.purpleLight : colors.bg.cardBorder,
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}
@@ -235,7 +236,7 @@ export default function ProfileScreen() {
     );
   };
 
-  const totalStudyHours = Math.floor((profile?.total_study_seconds ?? 0) / 3600);
+  const totalStudyMinutes = Math.floor((profile?.total_study_seconds ?? 0) / 60);
   const activeStreakDays = profile?.streak_days ?? 0;
 
   return (
@@ -324,7 +325,7 @@ export default function ProfileScreen() {
           {/* Stats row */}
           <View style={{ flexDirection: 'row', justifyContent: 'space-around' }}>
             <View style={{ alignItems: 'center', gap: 4 }}>
-              <CrystalIcon size={20} amount={profile?.crystal_balance ?? 0} />
+              <CrystalIcon size={22} fontSize={typography.sizes.lg} amount={profile?.crystal_balance ?? 0} />
               <Text style={{ color: colors.text.muted, fontSize: typography.sizes.xs }}>
                 Crystals
               </Text>
@@ -351,7 +352,7 @@ export default function ProfileScreen() {
                   fontWeight: typography.weights.bold,
                 }}
               >
-                {Number(profile?.consistency_multiplier ?? 1).toFixed(1)}x
+                {Number(profile?.consistency_multiplier ?? 1).toFixed(2)}x
               </Text>
               <Text style={{ color: colors.text.muted, fontSize: typography.sizes.xs }}>
                 Multiplier
@@ -365,7 +366,7 @@ export default function ProfileScreen() {
                   fontWeight: typography.weights.bold,
                 }}
               >
-                {totalStudyHours}h
+                {totalStudyMinutes}m
               </Text>
               <Text style={{ color: colors.text.muted, fontSize: typography.sizes.xs }}>
                 Total study
@@ -456,7 +457,7 @@ export default function ProfileScreen() {
         </View>
       </Card>
 
-      {/* Settings */}
+      {/* Settings & Logs */}
       <View style={{ gap: spacing.sm }}>
         <Text
           style={{
@@ -467,8 +468,39 @@ export default function ProfileScreen() {
             textTransform: 'uppercase',
           }}
         >
-          Settings
+          Cosmic Log
         </Text>
+        
+        {/* Reward History */}
+        <Pressable
+          onPress={() => router.push('/rewards-history' as never)}
+          style={({ pressed }) => ({
+            backgroundColor: colors.bg.card,
+            borderWidth: 1,
+            borderColor: colors.bg.cardBorder,
+            borderRadius: radius.lg,
+            padding: spacing.md,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: spacing.md,
+            opacity: pressed ? 0.75 : 1,
+          })}
+        >
+          <Text style={{ fontSize: 20 }}>🏆</Text>
+          <Text
+            style={{
+              flex: 1,
+              color: colors.text.primary,
+              fontSize: typography.sizes.base,
+              fontWeight: typography.weights.medium,
+            }}
+          >
+            Reward History (Istoric Premii)
+          </Text>
+          <Text style={{ color: colors.text.muted, fontSize: 16 }}>›</Text>
+        </Pressable>
+
+        {/* Settings */}
         <Pressable
           onPress={() => router.push('/settings' as never)}
           style={({ pressed }) => ({

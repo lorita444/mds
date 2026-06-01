@@ -6,9 +6,10 @@ type CrystalIconProps = {
   size?: number;
   amount?: number;
   showAmount?: boolean;
+  fontSize?: number;
 };
 
-export function CrystalIcon({ size = 24, amount, showAmount = true }: CrystalIconProps) {
+export function CrystalIcon({ size = 24, amount, showAmount = true, fontSize }: CrystalIconProps) {
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
       <Image source={CRYSTAL_ICON} style={{ width: size, height: size }} resizeMode="contain" />
@@ -16,7 +17,7 @@ export function CrystalIcon({ size = 24, amount, showAmount = true }: CrystalIco
         <Text
           style={{
             color: colors.crystal.primary,
-            fontSize: size * 0.6,
+            fontSize: fontSize ?? (size * 0.6),
             fontWeight: '700',
           }}
         >

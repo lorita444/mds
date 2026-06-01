@@ -5,6 +5,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, typography, radius } from '../utils/theme';
 import { Button } from '../components/ui/Button';
+import { useAuth } from '../context/auth-context';
 
 const RARITY_CONFIG: Record<
   string,
@@ -39,6 +40,7 @@ function formatDuration(seconds: number): string {
 export default function RewardRevealScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { refreshProfile } = useAuth();
   const { durationSeconds, sessionType, result } = useLocalSearchParams<{
     sessionId: string;
     durationSeconds: string;
@@ -59,11 +61,11 @@ export default function RewardRevealScreen() {
     try { return JSON.parse(result ?? '{}'); } catch { return {}; }
   })();
 
-  const crystals: number = parsed.crystals_awarded ?? 0;
-  const hasItem: boolean = !!parsed.item_earned;
+  const crystals: number = parsed.crystals_awarded ?? parsed.crystal_amount ?? 0;
+  const hasItem: boolean = !!parsed.item_earned || (!!parsed.reward_type && parsed.reward_type !== 'crystals');
   const itemName: string = parsed.item_name ?? 'Unknown Element';
-  const itemRarity: string = parsed.item_rarity ?? 'common';
-  const multiplier: number = parsed.multiplier ?? 1;
+  const itemRarity: string = parsed.item_rarity ?? parsed.rarity ?? 'common';
+  const multiplier: number = parsed.multiplier ?? parsed.consistency_multiplier ?? 1;
   const quizBonus: boolean = !!parsed.quiz_bonus;
   const consistencyBonus: boolean = !!parsed.consistency_bonus;
   const elapsed = parseInt(durationSeconds ?? '0', 10);
@@ -71,6 +73,8 @@ export default function RewardRevealScreen() {
   const rarityConf = RARITY_CONFIG[itemRarity] ?? RARITY_CONFIG.common;
 
   useEffect(() => {
+    refreshProfile().catch((err) => console.error('Failed to refresh profile on reward reveal', err));
+
     // Entrance sequence
     Animated.sequence([
       // Box pops in

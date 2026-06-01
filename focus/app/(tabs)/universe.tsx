@@ -181,7 +181,7 @@ export default function UniverseScreen() {
             <View style={{ flexDirection: 'row', gap: spacing.sm }}>
               {[
                 { icon: 'flame-outline' as const, iconActive: 'flame' as const, value: streak.toString(), label: 'Day streak', active: streak >= 7 },
-                { icon: 'flash-outline' as const, iconActive: 'flash' as const, value: `${multiplier.toFixed(1)}x`, label: 'Multiplier', active: multiplier >= 1.5 },
+                { icon: 'flash-outline' as const, iconActive: 'flash' as const, value: `${multiplier.toFixed(2)}x`, label: 'Multiplier', active: multiplier >= 1.5 },
                 { icon: 'time-outline' as const, iconActive: 'time' as const, value: formatSeconds(todaySeconds), label: 'Today', active: todaySeconds >= 3600 },
               ].map((stat) => (
                 <Card key={stat.label} variant="default" padding={spacing.md} style={{ flex: 1, gap: 6 }}>
@@ -228,7 +228,7 @@ export default function UniverseScreen() {
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs, backgroundColor: 'rgba(245,158,11,0.12)', borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: 6, borderWidth: 1, borderColor: 'rgba(245,158,11,0.3)' }}>
                     <Ionicons name="flash" size={13} color={colors.cosmic.goldLight} />
                     <Text style={{ color: colors.cosmic.goldLight, fontSize: typography.sizes.xs, fontWeight: typography.weights.bold }}>
-                      {multiplier.toFixed(1)}x Boost Active
+                      {multiplier.toFixed(2)}x Boost Active
                     </Text>
                   </View>
                 )}
@@ -386,9 +386,16 @@ export default function UniverseScreen() {
             {/* Recent rewards */}
             {rewards.length > 0 && (
               <View style={{ gap: spacing.sm }}>
-                <Text style={{ color: colors.text.secondary, fontSize: typography.sizes.xs, fontWeight: typography.weights.semibold, letterSpacing: typography.tracking.widest, textTransform: 'uppercase' }}>
-                  Recent Rewards
-                </Text>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={{ color: colors.text.secondary, fontSize: typography.sizes.xs, fontWeight: typography.weights.semibold, letterSpacing: typography.tracking.widest, textTransform: 'uppercase' }}>
+                    Recent Rewards
+                  </Text>
+                  <Pressable onPress={() => router.push('/rewards-history' as never)}>
+                    <Text style={{ color: colors.cosmic.purpleLight, fontSize: typography.sizes.xs, fontWeight: typography.weights.bold }}>
+                      View All ›
+                    </Text>
+                  </Pressable>
+                </View>
                 {rewards.slice(0, 4).map((r) => {
                   const rarityStyle = colors.rarity[r.rarity as Rarity];
                   return (

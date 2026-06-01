@@ -26,6 +26,8 @@ import { colors, spacing, typography, radius } from '../utils/theme';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { LoadingState } from '../components/ui/LoadingState';
+import { Modal } from '../components/ui/Modal';
+import { Input } from '../components/ui/Input';
 import type { Subject, Chapter, UniverseItem } from '../lib/types';
 
 function formatMinutes(minutes: number): string {
@@ -38,7 +40,7 @@ function formatMinutes(minutes: number): string {
 const CRYSTAL_WAGER_OPTIONS = [50, 100, 200, 500];
 
 export default function MissionSetupScreen() {
-  const { user, profile } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { subjectId: paramSubjectId } = useLocalSearchParams<{ subjectId?: string }>();
@@ -55,6 +57,26 @@ export default function MissionSetupScreen() {
   const [estimatedMinutes, setEstimatedMinutes] = useState<number | null>(null);
   const [estimateReasoning, setEstimateReasoning] = useState('');
   const [customMinutes, setCustomMinutes] = useState<number | null>(null);
+
+  const [showCustomModal, setShowCustomModal] = useState(false);
+  const [customMinutesInput, setCustomMinutesInput] = useState('');
+  const [customMinutesError, setCustomMinutesError] = useState('');
+
+  const handleSetCustomDuration = () => {
+    const mins = parseInt(customMinutesInput.trim(), 10);
+    if (isNaN(mins) || mins <= 0) {
+      setCustomMinutesError('Please enter a positive number of minutes.');
+      return;
+    }
+    if (mins > 720) {
+      setCustomMinutesError('Maximum duration is 720 minutes (12 hours).');
+      return;
+    }
+    setCustomMinutesError('');
+    setCustomMinutes(mins);
+    setShowCustomModal(false);
+    setCustomMinutesInput('');
+  };
 
   const [withQuiz, setWithQuiz] = useState(false);
   const [wagerType, setWagerType] = useState<'none' | 'crystals' | 'item'>('none');
@@ -172,6 +194,7 @@ export default function MissionSetupScreen() {
           wager_type: 'crystals',
           crystal_amount: crystalWager,
         });
+        await refreshProfile();
       } else if (wagerType === 'item' && wageredItemId) {
         await placeWager({
           session_id: session.id,
@@ -179,6 +202,7 @@ export default function MissionSetupScreen() {
           wager_type: 'universe_item',
           item_id: wageredItemId,
         });
+        await refreshProfile();
       }
 
       router.replace({
@@ -459,6 +483,33 @@ export default function MissionSetupScreen() {
                 </Pressable>
               );
             })}
+            {/* Custom Duration Chip */}
+            {(() => {
+              const isCustomActive = customMinutes !== null && !durationOptions.includes(customMinutes) && customMinutes !== estimatedMinutes;
+              return (
+                <Pressable
+                  onPress={() => setShowCustomModal(true)}
+                  style={{
+                    paddingHorizontal: spacing.md,
+                    paddingVertical: spacing.sm,
+                    borderRadius: radius.md,
+                    backgroundColor: isCustomActive ? colors.cosmic.purple : 'rgba(124,58,237,0.1)',
+                    borderWidth: 1,
+                    borderColor: isCustomActive ? colors.cosmic.purpleGlow : 'rgba(124,58,237,0.3)',
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: isCustomActive ? colors.text.primary : colors.cosmic.purpleLight,
+                      fontSize: typography.sizes.sm,
+                      fontWeight: isCustomActive ? typography.weights.bold : typography.weights.regular,
+                    }}
+                  >
+                    {isCustomActive ? `Custom: ${formatMinutes(customMinutes)}` : '+ Custom'}
+                  </Text>
+                </Pressable>
+              );
+            })()}
           </View>
 
           {selectedChapterIds.size > 0 && (
@@ -747,6 +798,29 @@ export default function MissionSetupScreen() {
           Select a subject to configure your mission.
         </Text>
       )}
+      <Modal
+        visible={showCustomModal}
+        onClose={() => { setShowCustomModal(false); setCustomMinutesError(''); }}
+        title="Custom Duration"
+      >
+        <View style={{ paddingHorizontal: spacing.lg, gap: spacing.md, paddingBottom: spacing.md }}>
+          <Input
+            label="Duration in minutes"
+            placeholder="e.g. 50"
+            value={customMinutesInput}
+            onChangeText={(v) => { setCustomMinutesInput(v); setCustomMinutesError(''); }}
+            keyboardType="number-pad"
+            autoFocus
+            error={customMinutesError}
+          />
+          <Button
+            label="Set Duration"
+            onPress={handleSetCustomDuration}
+            fullWidth
+            size="lg"
+          />
+        </View>
+      </Modal>
     </ScrollView>
   );
 }

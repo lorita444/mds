@@ -61,7 +61,7 @@ const STATUS_EMOJI: Record<string, string> = {
 };
 
 export default function CoopRoomScreen() {
-  const { user } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { roomId } = useLocalSearchParams<{ roomId: string }>();
@@ -291,11 +291,13 @@ export default function CoopRoomScreen() {
     setCompleting(true);
 
     const elapsed = Math.round((Date.now() - sessionStartRef.current) / 1000);
+    const multiplier = Number(profile?.consistency_multiplier ?? 1.0);
+    let sessionResult: any = null;
 
     try {
       await updateCoopMemberStatus(roomId, user.id, 'completed');
       if (sessionIdRef.current) {
-        await completeSession(sessionIdRef.current, elapsed, false, true);
+        sessionResult = await completeSession(sessionIdRef.current, elapsed, false, true);
       }
       const latestMembers = await getCoopMembers(roomId);
       const everyoneDone = latestMembers.every((m) => m.status === 'completed');
@@ -304,13 +306,19 @@ export default function CoopRoomScreen() {
       }
     } catch {}
 
+    const fallbackResult = {
+      crystals_awarded: Math.ceil(50 * multiplier),
+      coop_bonus: true,
+      multiplier
+    };
+
     router.replace({
       pathname: '/reward-reveal' as never,
       params: {
         sessionId: sessionIdRef.current ?? '',
         durationSeconds: String(elapsed),
         sessionType: 'casual',
-        result: JSON.stringify({ crystals_awarded: 50, coop_bonus: true }),
+        result: JSON.stringify(sessionResult ?? fallbackResult),
       },
     });
   }, [user?.id, roomId, router]);
@@ -426,19 +434,29 @@ export default function CoopRoomScreen() {
             completingRef.current = true;
             setCompleting(true);
             const elapsed = Math.round((Date.now() - sessionStartRef.current) / 1000);
+            const multiplier = Number(profile?.consistency_multiplier ?? 1.0);
+            let sessionResult: any = null;
             try {
               await abandonCoopSession(roomId);
               if (sessionIdRef.current) {
-                await completeSession(sessionIdRef.current, elapsed, false, true);
+                sessionResult = await completeSession(sessionIdRef.current, elapsed, false, true);
               }
+              await refreshProfile();
             } catch {}
+
+            const fallbackResult = {
+              crystals_awarded: Math.ceil(25 * multiplier),
+              coop_bonus: true,
+              multiplier
+            };
+
             router.replace({
               pathname: '/reward-reveal' as never,
               params: {
                 sessionId: sessionIdRef.current ?? '',
                 durationSeconds: String(elapsed),
                 sessionType: 'casual',
-                result: JSON.stringify({ crystals_awarded: 25, coop_bonus: true }),
+                result: JSON.stringify(sessionResult ?? fallbackResult),
               },
             });
           },
