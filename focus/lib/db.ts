@@ -62,11 +62,12 @@ export async function createSubject(
   color?: string,
   emoji?: string,
 ): Promise<Subject | null> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('subjects')
     .insert({ user_id: userId, name, description, color: color ?? '#7c3aed', emoji: emoji ?? '📚' })
     .select()
     .single();
+  if (error) throw new Error(error.message);
   return data;
 }
 

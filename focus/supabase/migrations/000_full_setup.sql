@@ -268,8 +268,8 @@ CREATE INDEX idx_materials_chapter_id      ON public.materials(chapter_id) WHERE
 CREATE INDEX idx_material_chunks_subject   ON public.material_chunks(subject_id);
 CREATE INDEX idx_material_chunks_material  ON public.material_chunks(material_id);
 -- IVFFlat index for cosine similarity search (tune lists= based on row count)
-CREATE INDEX idx_material_chunks_embedding ON public.material_chunks
-  USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+-- CREATE INDEX idx_material_chunks_embedding ON public.material_chunks
+--   USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
 
 CREATE INDEX idx_sessions_user_id          ON public.study_sessions(user_id);
 CREATE INDEX idx_sessions_subject_id       ON public.study_sessions(subject_id) WHERE subject_id IS NOT NULL;
