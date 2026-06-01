@@ -51,6 +51,7 @@ export type Chapter = {
   id: string;
   subject_id: string;
   name: string;
+  description: string | null;
   order_index: number;
   created_at: string;
 };
@@ -179,6 +180,9 @@ export type CoopRoom = {
   status: CoopRoomStatus;
   started_at: string | null;
   completed_at: string | null;
+  is_paused: boolean;
+  paused_at: string | null;
+  paused_seconds: number;
   created_at: string;
 };
 

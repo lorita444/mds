@@ -65,11 +65,22 @@ async function initializeDatabase() {
         id VARCHAR(36) PRIMARY KEY,
         subject_id VARCHAR(36) NOT NULL,
         name VARCHAR(255) NOT NULL,
+        description TEXT NULL,
         order_index INT NOT NULL DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (subject_id) REFERENCES subjects(id) ON DELETE CASCADE
       ) ENGINE=InnoDB;
     `);
+
+    try {
+      await connection.query('ALTER TABLE chapters ADD COLUMN description TEXT NULL');
+      console.log('Successfully added description column to chapters table.');
+    } catch (err) {
+      if (err.code !== 'ER_DUP_FIELDNAME') {
+        console.error('Error migrating chapters table:', err.message);
+      }
+    }
+
 
     // 4. Materials
     await connection.query(`
@@ -287,6 +298,9 @@ async function initializeDatabase() {
         status VARCHAR(50) NOT NULL DEFAULT 'waiting', -- 'waiting', 'starting', 'active', 'completed'
         started_at TIMESTAMP NULL DEFAULT NULL,
         completed_at TIMESTAMP NULL DEFAULT NULL,
+        is_paused TINYINT(1) NOT NULL DEFAULT 0,
+        paused_at TIMESTAMP NULL DEFAULT NULL,
+        paused_seconds INT NOT NULL DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
       ) ENGINE=InnoDB;
@@ -318,6 +332,21 @@ async function initializeDatabase() {
         FOREIGN KEY (material_id) REFERENCES materials(id) ON DELETE CASCADE
       ) ENGINE=InnoDB;
     `);
+
+    // Safe ALTER migrations for existing databases (coop_rooms pause state)
+    const alterMigrations = [
+      "ALTER TABLE coop_rooms ADD COLUMN is_paused TINYINT(1) NOT NULL DEFAULT 0",
+      "ALTER TABLE coop_rooms ADD COLUMN paused_at TIMESTAMP NULL DEFAULT NULL",
+      "ALTER TABLE coop_rooms ADD COLUMN paused_seconds INT NOT NULL DEFAULT 0",
+    ];
+    for (const sql of alterMigrations) {
+      try {
+        await connection.query(sql);
+      } catch (e) {
+        // Ignore duplicate column errors (errno 1060)
+        if (e.errno !== 1060) console.warn('Migration warning:', e.message);
+      }
+    }
 
     console.log('MySQL Database Schema Initialized Successfully!');
   } catch (error) {

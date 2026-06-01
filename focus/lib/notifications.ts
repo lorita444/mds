@@ -233,3 +233,35 @@ export async function cancelUnfinishedSessionReminder() {
   if (Platform.OS === 'web') return;
   await Notifications.cancelScheduledNotificationAsync('unfinished_session_reminder');
 }
+
+// ── CUSTOM DAILY STUDY REMINDER ───────────────────────────────
+
+export async function scheduleCustomStudyReminder(hour: number, minute: number, id?: string) {
+  if (Platform.OS === 'web') return;
+
+  const identifier = id ? `custom_study_reminder_${id}` : 'custom_study_reminder';
+  await cancelCustomStudyReminder(id);
+
+  await Notifications.scheduleNotificationAsync({
+    identifier,
+    content: {
+      title: 'Timpul de studiu! ⏰',
+      body: 'Este ora programată pentru sesiunea ta zilnică în StudyVerse. Să începem! 🚀',
+      sound: true,
+      categoryIdentifier: 'study_reminder',
+    },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DAILY,
+      hour,
+      minute,
+      channelId: 'default',
+    },
+  });
+  console.log(`Custom study reminder [${identifier}] scheduled at ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}!`);
+}
+
+export async function cancelCustomStudyReminder(id?: string) {
+  if (Platform.OS === 'web') return;
+  const identifier = id ? `custom_study_reminder_${id}` : 'custom_study_reminder';
+  await Notifications.cancelScheduledNotificationAsync(identifier);
+}

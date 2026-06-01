@@ -89,10 +89,11 @@ export async function fetchChapters(subjectId: string): Promise<ServiceResult<Ch
 export async function addChapter(
   subjectId: string,
   name: string,
+  description?: string,
   orderIndex?: number,
 ): Promise<ServiceResult<Chapter>> {
   try {
-    const data = await createChapter(subjectId, name, orderIndex);
+    const data = await createChapter(subjectId, name, description, orderIndex);
     if (!data) return { data: null, error: 'Failed to create chapter' };
     return { data, error: null };
   } catch (e) {
@@ -102,7 +103,7 @@ export async function addChapter(
 
 export async function editChapter(
   id: string,
-  updates: Partial<Pick<Chapter, 'name' | 'order_index'>>,
+  updates: Partial<Pick<Chapter, 'name' | 'description' | 'order_index'>>,
 ): Promise<ServiceResult<void>> {
   try {
     await updateChapter(id, updates);

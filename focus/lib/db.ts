@@ -65,6 +65,18 @@ export async function updateProfile(
   });
 }
 
+export async function resetStudyProgress(): Promise<void> {
+  await apiFetch('/users/profile/reset', {
+    method: 'POST',
+  });
+}
+
+export async function deleteUserAccount(): Promise<void> {
+  await apiFetch('/users/profile', {
+    method: 'DELETE',
+  });
+}
+
 // ── SUBJECTS ─────────────────────────────────────────────────
 
 export async function getSubjects(userId: string): Promise<Subject[]> {
@@ -128,17 +140,18 @@ export async function getChapters(subjectId: string): Promise<Chapter[]> {
 export async function createChapter(
   subjectId: string,
   name: string,
+  description?: string,
   orderIndex?: number,
 ): Promise<Chapter | null> {
   return await apiFetch('/chapters', {
     method: 'POST',
-    body: JSON.stringify({ subject_id: subjectId, name, order_index: orderIndex }),
+    body: JSON.stringify({ subject_id: subjectId, name, description, order_index: orderIndex }),
   });
 }
 
 export async function updateChapter(
   id: string,
-  updates: Partial<Pick<Chapter, 'name' | 'order_index'>>,
+  updates: Partial<Pick<Chapter, 'name' | 'description' | 'order_index'>>,
 ): Promise<void> {
   await apiFetch(`/chapters/${id}`, {
     method: 'PUT',
@@ -564,6 +577,34 @@ export async function getCoopMaterials(roomId: string): Promise<Material[]> {
     return [];
   }
 }
+
+export async function kickCoopMember(roomId: string, userId: string): Promise<void> {
+  await apiFetch(`/coop/rooms/${roomId}/members/${userId}`, { method: 'DELETE' });
+}
+
+export async function toggleCoopReady(roomId: string, ready: boolean): Promise<void> {
+  await apiFetch(`/coop/rooms/${roomId}/members/ready`, {
+    method: 'POST',
+    body: JSON.stringify({ ready }),
+  });
+}
+
+export async function startCoopTimer(roomId: string): Promise<void> {
+  await apiFetch(`/coop/rooms/${roomId}/start-timer`, { method: 'POST', body: '{}' });
+}
+
+export async function pauseCoopTimer(roomId: string): Promise<void> {
+  await apiFetch(`/coop/rooms/${roomId}/pause`, { method: 'POST', body: '{}' });
+}
+
+export async function resumeCoopTimer(roomId: string): Promise<void> {
+  await apiFetch(`/coop/rooms/${roomId}/resume`, { method: 'POST', body: '{}' });
+}
+
+export async function abandonCoopSession(roomId: string): Promise<void> {
+  await apiFetch(`/coop/rooms/${roomId}/abandon`, { method: 'POST', body: '{}' });
+}
+
 
 // ── STREAKS ──────────────────────────────────────────────────
 

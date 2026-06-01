@@ -15,7 +15,6 @@ import { useAuth } from '../../context/auth-context';
 import {
   getCoopRoom,
   getCoopMembers,
-  startCoopRoom,
   completeCoopRoom,
   updateCoopMemberStatus,
   createStudySession,
@@ -23,6 +22,12 @@ import {
   addCoopMaterial,
   getCoopMaterials,
   getAllUserMaterials,
+  kickCoopMember,
+  toggleCoopReady,
+  startCoopTimer,
+  pauseCoopTimer,
+  resumeCoopTimer,
+  abandonCoopSession,
 } from '../../lib/db';
 import { colors, spacing, typography, radius } from '../../utils/theme';
 import {
@@ -49,7 +54,7 @@ function formatCode(code: string): string {
 const STATUS_EMOJI: Record<string, string> = {
   joined: '🕐',
   ready: '✅',
-  accepted: '👍',
+  accepted: '✅',
   active: '🔥',
   completed: '🏆',
   abandoned: '💀',
@@ -66,6 +71,10 @@ export default function CoopRoomScreen() {
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
   const [completing, setCompleting] = useState(false);
+  const [pausing, setPausing] = useState(false);
+  const [togglingReady, setTogglingReady] = useState(false);
+  const [kickingUser, setKickingUser] = useState<string | null>(null);
+  const [wasKicked, setWasKicked] = useState(false);
 
   // Shared materials states
   const [sharedMaterials, setSharedMaterials] = useState<Material[]>([]);
@@ -84,7 +93,31 @@ export default function CoopRoomScreen() {
   const isCreator = room?.created_by === user?.id;
   const myMember = members.find((m) => m.user_id === user?.id);
   const myStatus = myMember?.status ?? 'joined';
+  const isMyself = (userId: string) => userId === user?.id;
+
+  // Ready check: all non-creator members must have status 'accepted'
+  const nonCreatorMembers = members.filter((m) => m.user_id !== room?.created_by);
+  const allReady = nonCreatorMembers.length > 0 && nonCreatorMembers.every((m) => m.status === 'accepted');
   const allCompleted = members.length > 0 && members.every((m) => m.status === 'completed');
+  const myReady = myStatus === 'accepted';
+
+  // Compute timer remaining considering pause state
+  const computeRemaining = useCallback((r: CoopRoom): number => {
+    if (!r.started_at) return 0;
+    const started = new Date(r.started_at).getTime();
+    const pausedSecs = r.paused_seconds ?? 0;
+
+    if (r.is_paused && r.paused_at) {
+      // Frozen — return what was left when paused
+      const pausedAtMs = new Date(r.paused_at).getTime();
+      const elapsed = Math.round((pausedAtMs - started) / 1000) - pausedSecs;
+      return Math.max(0, r.duration_seconds - elapsed);
+    } else {
+      // Running — subtract elapsed (net of pauses)
+      const elapsed = Math.round((Date.now() - started) / 1000) - pausedSecs;
+      return Math.max(0, r.duration_seconds - elapsed);
+    }
+  }, []);
 
   const loadRoom = useCallback(async () => {
     if (!roomId) return;
@@ -94,23 +127,23 @@ export default function CoopRoomScreen() {
         getCoopMembers(roomId),
         getCoopMaterials(roomId),
       ]);
-      if (r) setRoom(r);
+      if (r) {
+        setRoom(r);
+        if (r.status === 'active' && r.started_at) {
+          const rem = computeRemaining(r);
+          setRemaining(rem);
+          const end = new Date(r.started_at).getTime() + r.duration_seconds * 1000;
+          endTimeRef.current = end;
+        }
+      }
       setMembers(m as MemberWithUser[]);
       setSharedMaterials(mats);
       setLoading(false);
-
-      // If room is already active, compute remaining
-      if (r?.status === 'active' && r.started_at) {
-        const end = new Date(r.started_at).getTime() + r.duration_seconds * 1000;
-        endTimeRef.current = end;
-        const rem = Math.max(0, Math.round((end - Date.now()) / 1000));
-        setRemaining(rem);
-      }
     } catch (e) {
       console.error(e);
       setLoading(false);
     }
-  }, [roomId]);
+  }, [roomId, computeRemaining]);
 
   const loadUserMaterials = async () => {
     if (!user?.id) return;
@@ -138,34 +171,11 @@ export default function CoopRoomScreen() {
     }
   };
 
-  const handleAcceptStart = async () => {
-    if (!roomId || !user?.id) return;
-    try {
-      // Create a study session for this member
-      const session = await createStudySession({
-        user_id: user.id,
-        session_type: 'casual',
-        planned_seconds: room?.duration_seconds ?? 1800,
-      });
-      sessionIdRef.current = session?.id ?? null;
-      sessionStartRef.current = Date.now();
-
-      // Update status to accepted
-      await updateCoopMemberStatus(roomId, user.id, 'accepted');
-      await loadRoom();
-    } catch (e) {
-      Alert.alert('Eroare', 'Nu s-a putut confirma începerea sesiunii.');
-    }
-  };
-
   useEffect(() => { loadRoom(); }, [loadRoom]);
 
-  // Realtime synchronization via polling every 3 seconds
+  // Realtime sync via polling every 3 seconds
   useEffect(() => {
     if (!roomId) return;
-
-    // Initial load of materials
-    getCoopMaterials(roomId).then(setSharedMaterials).catch(console.error);
 
     const pollInterval = setInterval(async () => {
       try {
@@ -177,26 +187,38 @@ export default function CoopRoomScreen() {
 
         if (r) {
           setRoom(r);
-          // If room transitioned to active, synchronize local countdown timer
+
           if (r.status === 'active' && r.started_at) {
             const end = new Date(r.started_at).getTime() + r.duration_seconds * 1000;
-            if (endTimeRef.current !== end) {
-              endTimeRef.current = end;
-              const rem = Math.max(0, Math.round((end - Date.now()) / 1000));
-              setRemaining(rem);
+            endTimeRef.current = end;
 
-              // Auto-create study session if we are a member and room started
-              const myCurrentMember = m.find((member) => member.user_id === user?.id);
-              if (myCurrentMember?.status === 'active' && !sessionIdRef.current) {
-                const session = await createStudySession({
-                  user_id: user!.id,
-                  session_type: 'casual',
-                  planned_seconds: r.duration_seconds,
-                });
-                sessionIdRef.current = session?.id ?? null;
-                sessionStartRef.current = Date.now();
-              }
+            // Synchronize the countdown when not paused
+            if (!r.is_paused) {
+              const rem = computeRemaining(r);
+              setRemaining(rem);
+            } else {
+              // Paused — freeze the timer
+              const rem = computeRemaining(r);
+              setRemaining(rem);
             }
+
+            // Auto-create study session if we're a member and room became active
+            const myCurrentMember = (m as MemberWithUser[]).find((mb) => mb.user_id === user?.id);
+            if (myCurrentMember?.status === 'active' && !sessionIdRef.current) {
+              const session = await createStudySession({
+                user_id: user!.id,
+                session_type: 'casual',
+                planned_seconds: r.duration_seconds,
+              });
+              sessionIdRef.current = session?.id ?? null;
+              sessionStartRef.current = Date.now();
+            }
+          }
+
+          // Check if kicked (was in members but no longer present)
+          const myCurrentMember = (m as MemberWithUser[]).find((mb) => mb.user_id === user?.id);
+          if (!myCurrentMember && !wasKicked && r.status === 'waiting') {
+            setWasKicked(true);
           }
         }
 
@@ -208,16 +230,27 @@ export default function CoopRoomScreen() {
     }, 3000);
 
     return () => clearInterval(pollInterval);
-  }, [roomId, user?.id]);
+  }, [roomId, user?.id, wasKicked, computeRemaining]);
 
-  // Countdown interval (only when room is active)
+  // Navigate back if kicked
   useEffect(() => {
-    if (room?.status !== 'active') {
+    if (wasKicked) {
+      Alert.alert('Ai fost exclus', 'Ai fost exclus din cameră de către creator!', [
+        { text: 'OK', onPress: () => router.replace('/(tabs)/studyverse' as never) },
+      ]);
+    }
+  }, [wasKicked, router]);
+
+  // Countdown interval (only when room is active AND not paused)
+  useEffect(() => {
+    if (room?.status !== 'active' || room?.is_paused) {
       if (intervalRef.current) clearInterval(intervalRef.current);
       return;
     }
+    if (intervalRef.current) clearInterval(intervalRef.current);
     intervalRef.current = setInterval(() => {
-      const rem = Math.max(0, Math.round((endTimeRef.current - Date.now()) / 1000));
+      if (!room) return;
+      const rem = computeRemaining(room);
       setRemaining(rem);
       if (rem === 0) {
         clearInterval(intervalRef.current!);
@@ -225,22 +258,22 @@ export default function CoopRoomScreen() {
       }
     }, 1000);
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [room?.status]);
+  }, [room?.status, room?.is_paused, room?.paused_seconds, computeRemaining]);
 
-  // App foreground: resync timer and schedule background notification
+  // App foreground: resync timer
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
         cancelActiveSessionNotifications().catch(() => {});
         cancelUnfinishedSessionReminder().catch(() => {});
-        if (room?.status === 'active') {
-          const rem = Math.max(0, Math.round((endTimeRef.current - Date.now()) / 1000));
+        if (room?.status === 'active' && !room?.is_paused) {
+          const rem = computeRemaining(room);
           setRemaining(rem);
           if (rem === 0) handleTimerEnd();
         }
       } else if (state === 'background') {
-        if (room?.status === 'active' && myStatus === 'active') {
-          const rem = Math.max(0, Math.round((endTimeRef.current - Date.now()) / 1000));
+        if (room?.status === 'active' && myStatus === 'active' && !room?.is_paused) {
+          const rem = computeRemaining(room);
           scheduleActiveSessionTimer(rem).catch(() => {});
         }
       }
@@ -250,7 +283,7 @@ export default function CoopRoomScreen() {
       cancelActiveSessionNotifications().catch(() => {});
       cancelUnfinishedSessionReminder().catch(() => {});
     };
-  }, [room?.status, myStatus]);
+  }, [room?.status, room?.is_paused, myStatus, computeRemaining]);
 
   const handleTimerEnd = useCallback(async () => {
     if (completingRef.current || !user?.id || !roomId) return;
@@ -264,7 +297,6 @@ export default function CoopRoomScreen() {
       if (sessionIdRef.current) {
         await completeSession(sessionIdRef.current, elapsed, false, true);
       }
-      // If all done, complete the room
       const latestMembers = await getCoopMembers(roomId);
       const everyoneDone = latestMembers.every((m) => m.status === 'completed');
       if (everyoneDone) {
@@ -283,11 +315,16 @@ export default function CoopRoomScreen() {
     });
   }, [user?.id, roomId, router]);
 
+  // Creator: Start Session (all non-creator must be ready)
   const handleStart = async () => {
     if (!user?.id || !room || !isCreator || starting) return;
+    if (!allReady && nonCreatorMembers.length > 0) {
+      Alert.alert('Așteptăm prietenii', 'Nu toți membrii sunt pregătiți. Ei trebuie să apese "Sunt Pregătit!" înainte de a putea da startul.');
+      return;
+    }
     setStarting(true);
     try {
-      // Create a study session for this user tied to co-op
+      // Create a study session for the creator
       const session = await createStudySession({
         user_id: user.id,
         session_type: 'casual',
@@ -296,7 +333,7 @@ export default function CoopRoomScreen() {
       sessionIdRef.current = session?.id ?? null;
       sessionStartRef.current = Date.now();
 
-      await startCoopRoom(roomId!);
+      await startCoopTimer(roomId!);
       await loadRoom();
     } catch (e) {
       Alert.alert('Eroare', e instanceof Error ? e.message : 'Nu s-a putut iniția pornirea sesiunii');
@@ -305,15 +342,120 @@ export default function CoopRoomScreen() {
     }
   };
 
+  // Non-creator: toggle ready
+  const handleToggleReady = async () => {
+    if (!roomId || !user?.id || togglingReady) return;
+    setTogglingReady(true);
+    try {
+      await toggleCoopReady(roomId, !myReady);
+      await loadRoom();
+    } catch (e) {
+      Alert.alert('Eroare', 'Nu s-a putut schimba statusul.');
+    } finally {
+      setTogglingReady(false);
+    }
+  };
+
+  // Creator: kick a member
+  const handleKick = (userId: string, username: string) => {
+    Alert.alert(
+      `Excluzi pe ${username}?`,
+      'Membrul va fi eliminat din cameră.',
+      [
+        { text: 'Anulează', style: 'cancel' },
+        {
+          text: 'Kick',
+          style: 'destructive',
+          onPress: async () => {
+            setKickingUser(userId);
+            try {
+              await kickCoopMember(roomId!, userId);
+              await loadRoom();
+            } catch (e) {
+              Alert.alert('Eroare', 'Nu s-a putut exclude membrul.');
+            } finally {
+              setKickingUser(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // Pause timer
+  const handlePause = async () => {
+    if (!roomId || pausing) return;
+    setPausing(true);
+    try {
+      await pauseCoopTimer(roomId);
+      await loadRoom();
+    } catch (e) {
+      Alert.alert('Eroare', 'Nu s-a putut pauza sesiunea.');
+    } finally {
+      setPausing(false);
+    }
+  };
+
+  // Resume timer
+  const handleResume = async () => {
+    if (!roomId || pausing) return;
+    setPausing(true);
+    try {
+      await resumeCoopTimer(roomId);
+      await loadRoom();
+    } catch (e) {
+      Alert.alert('Eroare', 'Nu s-a putut relua sesiunea.');
+    } finally {
+      setPausing(false);
+    }
+  };
+
+  // Stop/Abandon session
+  const handleStop = () => {
+    Alert.alert(
+      'Oprești Sesiunea?',
+      'Aceasta va marca sesiunea ca finalizată pentru toți membrii. Acțiunea este ireversibilă.',
+      [
+        { text: 'Anulează', style: 'cancel' },
+        {
+          text: 'Oprește',
+          style: 'destructive',
+          onPress: async () => {
+            if (!roomId || !user?.id || completingRef.current) return;
+            if (intervalRef.current) clearInterval(intervalRef.current);
+            completingRef.current = true;
+            setCompleting(true);
+            const elapsed = Math.round((Date.now() - sessionStartRef.current) / 1000);
+            try {
+              await abandonCoopSession(roomId);
+              if (sessionIdRef.current) {
+                await completeSession(sessionIdRef.current, elapsed, false, true);
+              }
+            } catch {}
+            router.replace({
+              pathname: '/reward-reveal' as never,
+              params: {
+                sessionId: sessionIdRef.current ?? '',
+                durationSeconds: String(elapsed),
+                sessionType: 'casual',
+                result: JSON.stringify({ crystals_awarded: 25, coop_bonus: true }),
+              },
+            });
+          },
+        },
+      ]
+    );
+  };
+
   const handleMemberComplete = async () => {
     if (!user?.id || !roomId || completingRef.current) return;
     Alert.alert(
-      'Complete Session?',
-      'Mark yourself as done. Other members can still continue.',
+      'Finalizează?',
+      'Te marchezi ca terminat. Ceilalți membri pot continua.',
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Anulează', style: 'cancel' },
         {
-          text: 'Complete',
+          text: 'Finalizează',
           onPress: async () => {
             if (intervalRef.current) clearInterval(intervalRef.current);
             completingRef.current = true;
@@ -334,7 +476,7 @@ export default function CoopRoomScreen() {
             }
           },
         },
-      ],
+      ]
     );
   };
 
@@ -355,9 +497,11 @@ export default function CoopRoomScreen() {
 
   const isActive = room.status === 'active';
   const isWaiting = room.status === 'waiting';
+  const isPaused = !!room.is_paused;
   const elapsedPct = room.duration_seconds > 0
     ? Math.round((1 - remaining / room.duration_seconds) * 100)
     : 0;
+  const readyCount = nonCreatorMembers.filter((m) => m.status === 'accepted').length;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg.primary }}>
@@ -386,7 +530,7 @@ export default function CoopRoomScreen() {
               Study Room
             </Text>
             <Text style={{ color: colors.text.muted, fontSize: typography.sizes.xs }}>
-              {isWaiting ? 'Waiting for members' : isActive ? 'Session active' : 'Session ended'}
+              {isWaiting ? 'Lobby – Așteptăm membrii' : isActive ? (isPaused ? '⏸ Sesiune Pauzată' : '🔥 Sesiune Activă') : 'Sesiune Încheiată'}
             </Text>
           </View>
           <CoopBadgePlaceholder size={40} memberCount={members.length} />
@@ -406,7 +550,7 @@ export default function CoopRoomScreen() {
                     textTransform: 'uppercase',
                   }}
                 >
-                  Room Code · Tap to Copy
+                  Cod Cameră · Atinge pentru a copia
                 </Text>
                 <Text
                   style={{
@@ -420,7 +564,7 @@ export default function CoopRoomScreen() {
                   {formatCode(room.join_code)}
                 </Text>
                 <Text style={{ color: colors.text.muted, fontSize: typography.sizes.xs }}>
-                  Duration: {Math.round(room.duration_seconds / 60)}m
+                  Durată: {Math.round(room.duration_seconds / 60)}m
                 </Text>
               </View>
             </Card>
@@ -432,9 +576,18 @@ export default function CoopRoomScreen() {
           <TimerDisplay
             remainingSeconds={remaining}
             totalSeconds={room.duration_seconds}
-            label="Remaining"
+            label={isPaused ? 'Pauză ⏸' : 'Timp Rămas'}
             size="lg"
           />
+        )}
+
+        {/* Paused banner */}
+        {isActive && isPaused && (
+          <Card variant="glow" padding={spacing.sm}>
+            <Text style={{ color: colors.cosmic.purpleLight, fontSize: typography.sizes.sm, textAlign: 'center' }}>
+              ⏸ Sesiunea este în pauză. Oricine poate relua cronometrul.
+            </Text>
+          </Card>
         )}
 
         {/* Members */}
@@ -448,12 +601,13 @@ export default function CoopRoomScreen() {
               textTransform: 'uppercase',
             }}
           >
-            Members · {members.length}
+            Membri · {members.length}
           </Text>
           {members.map((m) => {
             const isMe = m.user_id === user?.id;
             const username =
               (m as MemberWithUser).users?.username ?? (isMe ? 'You' : 'Member');
+            const isRoomCreator = m.user_id === room.created_by;
             return (
               <View
                 key={m.id}
@@ -490,12 +644,35 @@ export default function CoopRoomScreen() {
                       fontWeight: isMe ? typography.weights.semibold : typography.weights.regular,
                     }}
                   >
-                    {username} {isMe ? '(you)' : ''} {m.user_id === room.created_by ? '👑' : ''}
+                    {username} {isMe ? '(tú)' : ''} {isRoomCreator ? '👑' : ''}
                   </Text>
                   <Text style={{ color: colors.text.muted, fontSize: typography.sizes.xs }}>
-                    {m.status}
+                    {m.status === 'accepted' ? '✅ Pregătit' :
+                      m.status === 'joined' ? '⏳ Nepregatit' :
+                        m.status === 'active' ? '🔥 În sesiune' :
+                          m.status === 'completed' ? '🏆 Finalizat' :
+                            m.status === 'abandoned' ? '💀 Abandonat' : m.status}
                   </Text>
                 </View>
+                {/* Kick button (creator only, not for self, only in waiting) */}
+                {isCreator && !isMe && isWaiting && (
+                  <Pressable
+                    onPress={() => handleKick(m.user_id, username)}
+                    disabled={kickingUser === m.user_id}
+                    style={{
+                      paddingHorizontal: spacing.sm,
+                      paddingVertical: 4,
+                      borderRadius: radius.sm,
+                      backgroundColor: 'rgba(239,68,68,0.15)',
+                      borderWidth: 1,
+                      borderColor: 'rgba(239,68,68,0.35)',
+                    }}
+                  >
+                    <Text style={{ color: '#ef4444', fontSize: typography.sizes.xs, fontWeight: typography.weights.bold }}>
+                      {kickingUser === m.user_id ? '...' : 'Kick'}
+                    </Text>
+                  </Pressable>
+                )}
               </View>
             );
           })}
@@ -585,93 +762,108 @@ export default function CoopRoomScreen() {
           backgroundColor: colors.bg.primary,
         }}
       >
-        {/* Waiting: start button (creator only) */}
+        {/* WAITING LOBBY */}
         {isWaiting && isCreator && (
-          <Button
-            label={`Start Session · ${Math.round(room.duration_seconds / 60)}m`}
-            onPress={handleStart}
-            loading={starting}
-            size="lg"
-            fullWidth
-            variant="crystal"
-          />
+          <View style={{ gap: spacing.sm }}>
+            {members.length <= 1 && (
+              <Card variant="glow" padding={spacing.md}>
+                <Text
+                  style={{
+                    color: colors.cosmic.purpleLight,
+                    fontSize: typography.sizes.sm,
+                    textAlign: 'center',
+                    lineHeight: 18,
+                  }}
+                >
+                  🚀 Trimite codul camerei prietenilor tăi. Ei trebuie să apese "Sunt Pregătit!" înainte de a da startul.
+                </Text>
+              </Card>
+            )}
+            {members.length > 1 && (
+              <Card variant="flat" padding={spacing.sm}>
+                <Text style={{ color: allReady ? colors.crystal.primary : colors.text.muted, fontSize: typography.sizes.sm, textAlign: 'center' }}>
+                  {allReady ? '✅ Toți sunt pregătiți! Poți da startul.' : `⏳ ${readyCount}/${nonCreatorMembers.length} pregătiți – așteptăm...`}
+                </Text>
+              </Card>
+            )}
+            <Button
+              label={
+                members.length <= 1
+                  ? 'Așteptăm prietenii...'
+                  : !allReady
+                    ? `Start Session · ${readyCount}/${nonCreatorMembers.length} pregătiți`
+                    : `🚀 Start Session · ${Math.round(room.duration_seconds / 60)}m`
+              }
+              onPress={handleStart}
+              loading={starting}
+              disabled={members.length <= 1 || (!allReady && nonCreatorMembers.length > 0)}
+              size="lg"
+              fullWidth
+              variant="crystal"
+            />
+          </View>
         )}
+
         {isWaiting && !isCreator && (
-          <Card variant="flat" padding={spacing.sm}>
-            <Text
-              style={{
-                color: colors.text.muted,
-                fontSize: typography.sizes.sm,
-                textAlign: 'center',
-              }}
-            >
-              Waiting for the room creator to start…
-            </Text>
-          </Card>
+          <View style={{ gap: spacing.sm }}>
+            <Card variant="flat" padding={spacing.sm}>
+              <Text style={{ color: colors.text.muted, fontSize: typography.sizes.sm, textAlign: 'center' }}>
+                {myReady ? '✅ Ești pregătit! Așteptăm creatorul să dea startul...' : '⏳ Apasă butonul când ești gata de studiu.'}
+              </Text>
+            </Card>
+            <Button
+              label={myReady ? '✅ Sunt Pregătit! (Anulează)' : '🎯 Sunt Pregătit!'}
+              onPress={handleToggleReady}
+              loading={togglingReady}
+              size="lg"
+              fullWidth
+              variant={myReady ? 'primary' : 'crystal'}
+            />
+          </View>
         )}
 
-        {/* Starting: waiting for others to accept (creator only) */}
-        {room.status === 'starting' && isCreator && (
-          <Card variant="glow" padding={spacing.sm}>
-            <Text
-              style={{
-                color: colors.crystal.primary,
-                fontSize: typography.sizes.sm,
-                textAlign: 'center',
-              }}
-            >
-              ⏳ Așteptăm ca toți prietenii să accepte... ({members.filter(m => m.status === 'accepted').length}/{members.length})
-            </Text>
-          </Card>
-        )}
-        
-        {/* Starting: waiting for others to accept (others who accepted) */}
-        {room.status === 'starting' && !isCreator && myStatus === 'accepted' && (
-          <Card variant="glow" padding={spacing.sm}>
-            <Text
-              style={{
-                color: colors.cosmic.purpleLight,
-                fontSize: typography.sizes.sm,
-                textAlign: 'center',
-              }}
-            >
-              👍 Ai acceptat! Așteptăm restul membrilor... ({members.filter(m => m.status === 'accepted').length}/{members.length})
-            </Text>
-          </Card>
-        )}
-
-        {/* Active: complete early / abandon */}
+        {/* ACTIVE SESSION */}
         {isActive && myStatus === 'active' && (
           <>
+            {/* Pause/Resume buttons */}
+            <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+              {!isPaused ? (
+                <Button
+                  label="⏸ Pauză"
+                  onPress={handlePause}
+                  loading={pausing}
+                  size="md"
+                  variant="primary"
+                  style={{ flex: 1 }}
+                />
+              ) : (
+                <Button
+                  label="▶️ Continuă"
+                  onPress={handleResume}
+                  loading={pausing}
+                  size="md"
+                  variant="crystal"
+                  style={{ flex: 1 }}
+                />
+              )}
+              <Button
+                label="⏹ Stop"
+                onPress={handleStop}
+                size="md"
+                variant="danger"
+                style={{ flex: 1 }}
+              />
+            </View>
+
             {elapsedPct >= 50 && (
               <Button
-                label="Complete Session"
+                label="✅ Finalizează Sesiunea"
                 onPress={handleMemberComplete}
                 loading={completing}
                 size="lg"
                 fullWidth
               />
             )}
-            <Button
-              label="Leave Room"
-              variant="danger"
-              onPress={() => {
-                Alert.alert('Leave Room?', 'You will be marked as abandoned.', [
-                  { text: 'Cancel', style: 'cancel' },
-                  {
-                    text: 'Leave',
-                    style: 'destructive',
-                    onPress: async () => {
-                      await updateCoopMemberStatus(roomId!, user!.id, 'abandoned');
-                      router.back();
-                    },
-                  },
-                ]);
-              }}
-              disabled={completing}
-              size="lg"
-              fullWidth
-            />
           </>
         )}
 
@@ -685,7 +877,7 @@ export default function CoopRoomScreen() {
                 textAlign: 'center',
               }}
             >
-              🏆 You finished! Waiting for others… {members.filter((m) => m.status === 'completed').length}/{members.length} done
+              🏆 Ai terminat! Așteptăm ceilalți... {members.filter((m) => m.status === 'completed').length}/{members.length} gata
             </Text>
           </Card>
         )}
@@ -693,76 +885,13 @@ export default function CoopRoomScreen() {
         {/* All done */}
         {allCompleted && (
           <Button
-            label="View Reward"
+            label="Vezi Recompensa"
             onPress={() => router.replace('/(tabs)/studyverse' as never)}
             size="lg"
             fullWidth
           />
         )}
       </View>
-
-      {/* Ready / Start Confirmation Overlay */}
-      {room?.status === 'starting' && myStatus === 'joined' && (
-        <View
-          style={{
-            position: 'absolute',
-            top: 0,
-            bottom: 0,
-            left: 0,
-            right: 0,
-            backgroundColor: 'rgba(3, 7, 18, 0.95)',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: spacing.lg,
-            zIndex: 1000,
-          }}
-        >
-          <Card variant="glow" padding={spacing.xl} style={{ width: '100%', gap: spacing.lg, alignItems: 'center' }}>
-            <Text style={{ fontSize: 40 }}>📚</Text>
-            <View style={{ gap: spacing.xs, alignItems: 'center' }}>
-              <Text
-                style={{
-                  color: colors.text.primary,
-                  fontSize: typography.sizes.lg,
-                  fontWeight: typography.weights.heavy,
-                  textAlign: 'center',
-                }}
-              >
-                Pregătit de studiu?
-              </Text>
-              <Text
-                style={{
-                  color: colors.text.secondary,
-                  fontSize: typography.sizes.sm,
-                  textAlign: 'center',
-                }}
-              >
-                Creatorul camerei dorește să înceapă sesiunea de {Math.round(room.duration_seconds / 60)} minute! Confirmă pentru a da startul timerului sincronizat.
-              </Text>
-            </View>
-
-            <View style={{ width: '100%', gap: spacing.sm }}>
-              <Button
-                label="Acceptă & Începe ✅"
-                variant="crystal"
-                onPress={handleAcceptStart}
-                fullWidth
-                size="lg"
-              />
-              <Button
-                label="Părăsește Camera"
-                variant="danger"
-                onPress={async () => {
-                  await updateCoopMemberStatus(roomId!, user!.id, 'abandoned');
-                  router.back();
-                }}
-                fullWidth
-                size="lg"
-              />
-            </View>
-          </Card>
-        </View>
-      )}
 
       {/* Add Material Modal */}
       <Modal

@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { View, Text, ScrollView, Pressable, Alert, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/auth-context';
 import { getStreaks } from '../../lib/db';
 import { colors, spacing, typography, radius } from '../../utils/theme';
@@ -202,6 +204,7 @@ function MultiplierProgress({ streakDays, multiplier }: { streakDays: number; mu
 
 export default function ProfileScreen() {
   const { profile, signOut, refreshProfile } = useAuth();
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const [streaks, setStreaks] = useState<Streak[]>([]);
   const [loadingStreaks, setLoadingStreaks] = useState(true);
@@ -254,15 +257,33 @@ export default function ProfileScreen() {
       }
     >
       {/* Header */}
-      <Text
-        style={{
-          color: colors.text.primary,
-          fontSize: typography.sizes.xl,
-          fontWeight: typography.weights.heavy,
-        }}
-      >
-        Profile
-      </Text>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Text
+          style={{
+            color: colors.text.primary,
+            fontSize: typography.sizes.xl,
+            fontWeight: typography.weights.heavy,
+          }}
+        >
+          Profile
+        </Text>
+        <Pressable
+          onPress={() => router.push('/settings' as never)}
+          style={({ pressed }) => ({
+            width: 40,
+            height: 40,
+            borderRadius: radius.full,
+            backgroundColor: colors.bg.card,
+            borderWidth: 1,
+            borderColor: colors.bg.cardBorder,
+            alignItems: 'center',
+            justifyContent: 'center',
+            opacity: pressed ? 0.75 : 1,
+          })}
+        >
+          <Ionicons name="settings-sharp" size={20} color={colors.text.secondary} />
+        </Pressable>
+      </View>
 
       {/* User card */}
       <Card variant="glow" padding={spacing.lg}>
@@ -280,7 +301,7 @@ export default function ProfileScreen() {
                 justifyContent: 'center',
               }}
             >
-              <Text style={{ fontSize: 28 }}>🧑‍🚀</Text>
+              <Text style={{ fontSize: 28 }}>{profile?.avatar_url ?? '🧑‍🚀'}</Text>
             </View>
             <View style={{ flex: 1 }}>
               <Text
@@ -330,7 +351,7 @@ export default function ProfileScreen() {
                   fontWeight: typography.weights.bold,
                 }}
               >
-                {(profile?.consistency_multiplier ?? 1).toFixed(1)}x
+                {Number(profile?.consistency_multiplier ?? 1).toFixed(1)}x
               </Text>
               <Text style={{ color: colors.text.muted, fontSize: typography.sizes.xs }}>
                 Multiplier
@@ -401,7 +422,7 @@ export default function ProfileScreen() {
           </Text>
           <MultiplierProgress
             streakDays={activeStreakDays}
-            multiplier={profile?.consistency_multiplier ?? 1}
+            multiplier={Number(profile?.consistency_multiplier ?? 1)}
           />
         </View>
       </Card>
@@ -448,41 +469,33 @@ export default function ProfileScreen() {
         >
           Settings
         </Text>
-        {[
-          { icon: '🔔', label: 'Notifications', action: () => {} },
-          { icon: '🎨', label: 'Appearance', action: () => {} },
-          { icon: '🔒', label: 'Privacy', action: () => {} },
-          { icon: '❓', label: 'Help & Support', action: () => {} },
-        ].map((item) => (
-          <Pressable
-            key={item.label}
-            onPress={item.action}
-            style={({ pressed }) => ({
-              backgroundColor: colors.bg.card,
-              borderWidth: 1,
-              borderColor: colors.bg.cardBorder,
-              borderRadius: radius.lg,
-              padding: spacing.md,
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: spacing.md,
-              opacity: pressed ? 0.75 : 1,
-            })}
+        <Pressable
+          onPress={() => router.push('/settings' as never)}
+          style={({ pressed }) => ({
+            backgroundColor: colors.bg.card,
+            borderWidth: 1,
+            borderColor: colors.bg.cardBorder,
+            borderRadius: radius.lg,
+            padding: spacing.md,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: spacing.md,
+            opacity: pressed ? 0.75 : 1,
+          })}
+        >
+          <Text style={{ fontSize: 20 }}>⚙️</Text>
+          <Text
+            style={{
+              flex: 1,
+              color: colors.text.primary,
+              fontSize: typography.sizes.base,
+              fontWeight: typography.weights.medium,
+            }}
           >
-            <Text style={{ fontSize: 20 }}>{item.icon}</Text>
-            <Text
-              style={{
-                flex: 1,
-                color: colors.text.primary,
-                fontSize: typography.sizes.base,
-                fontWeight: typography.weights.medium,
-              }}
-            >
-              {item.label}
-            </Text>
-            <Text style={{ color: colors.text.muted, fontSize: 16 }}>›</Text>
-          </Pressable>
-        ))}
+            Cosmic Settings (Setări aplicație)
+          </Text>
+          <Text style={{ color: colors.text.muted, fontSize: 16 }}>›</Text>
+        </Pressable>
       </View>
 
       {/* Sign out */}

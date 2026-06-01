@@ -107,6 +107,24 @@ export const supabase = {
       return { error: null };
     },
 
+    async resetPasswordForEmail(email: string) {
+      try {
+        const res = await fetch(`${API_URL}/auth/reset-password`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+        const json = await res.json();
+        if (!res.ok) {
+          return { data: null, error: { message: json.error || 'Reset password failed' } };
+        }
+        return { data: json, error: null };
+      } catch (error) {
+        return { data: null, error: { message: (error as any).message || 'Network request failed' } };
+      }
+    },
+
+
     onAuthStateChange(callback: (event: string, session: any) => void) {
       listeners.add(callback);
       // Run once with current session

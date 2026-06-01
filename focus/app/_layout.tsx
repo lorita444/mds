@@ -14,11 +14,16 @@ import { LoadingState } from '../components/ui/LoadingState';
 import { ErrorBoundary } from '../components/ui/ErrorBoundary';
 import { ToastContainer } from '../components/ui/Toast';
 import { ALL_ASSETS } from '../utils/assets';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   requestNotificationPermissions,
   scheduleDailyStudyReminder,
   scheduleMorningStudyReminder,
   scheduleSnoozedStudyReminder,
+  cancelDailyStudyReminder,
+  cancelMorningStudyReminder,
+  scheduleCustomStudyReminder,
+  cancelCustomStudyReminder,
 } from '../lib/notifications';
 
 function RootNavigation({ assetsReady }: { assetsReady: boolean }) {
@@ -41,10 +46,44 @@ function RootNavigation({ assetsReady }: { assetsReady: boolean }) {
 
   useEffect(() => {
     if (session && profile) {
-      scheduleDailyStudyReminder(profile.streak_days).catch(() => {});
-      scheduleMorningStudyReminder(profile.streak_days).catch(() => {});
+      const initReminders = async () => {
+        try {
+          const morningEnabled = await AsyncStorage.getItem('settings_morning_reminder');
+          const eveningEnabled = await AsyncStorage.getItem('settings_evening_reminder');
+          const remindersJson = await AsyncStorage.getItem('settings_custom_reminders');
+
+          if (morningEnabled === 'false') {
+            await cancelMorningStudyReminder().catch(() => {});
+          } else {
+            await scheduleMorningStudyReminder(profile.streak_days).catch(() => {});
+          }
+
+          if (eveningEnabled === 'false') {
+            await cancelDailyStudyReminder().catch(() => {});
+          } else {
+            await scheduleDailyStudyReminder(profile.streak_days).catch(() => {});
+          }
+
+          // Load and schedule multiple custom reminders
+          if (remindersJson) {
+            const reminders: { id: string; hour: number; minute: number; enabled: boolean }[] = JSON.parse(remindersJson);
+            for (const reminder of reminders) {
+              if (reminder.enabled) {
+                await scheduleCustomStudyReminder(reminder.hour, reminder.minute, reminder.id).catch(() => {});
+              } else {
+                await cancelCustomStudyReminder(reminder.id).catch(() => {});
+              }
+            }
+          }
+        } catch (e) {
+          console.error('Failed to initialize settings-aware reminders', e);
+        }
+      };
+
+      initReminders().catch(() => {});
     }
   }, [session, profile]);
+
 
   useEffect(() => {
     const sub = Notifications.addNotificationResponseReceivedListener(async (response) => {
@@ -79,7 +118,17 @@ function RootNavigation({ assetsReady }: { assetsReady: boolean }) {
         animation: 'fade',
         contentStyle: { backgroundColor: '#030712' },
       }}
-    />
+    >
+      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen
+        name="settings"
+        options={{
+          presentation: 'modal',
+          animation: 'slide_from_bottom',
+          headerShown: false,
+        }}
+      />
+    </Stack>
   );
 }
 

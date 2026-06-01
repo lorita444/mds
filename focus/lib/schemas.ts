@@ -36,6 +36,7 @@ export const chapterSchema = z.object({
     .string()
     .min(1, 'Chapter name is required')
     .max(80, 'Name must be under 80 characters'),
+  description: z.string().max(200, 'Description must be under 200 characters').optional(),
 });
 
 export type LoginForm = z.infer<typeof loginSchema>;

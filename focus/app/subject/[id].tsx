@@ -89,6 +89,7 @@ export default function SubjectDetailScreen() {
   // Chapter modal
   const [showAddChapter, setShowAddChapter] = useState(false);
   const [newChapterName, setNewChapterName] = useState('');
+  const [newChapterDesc, setNewChapterDesc] = useState('');
   const [chapterNameError, setChapterNameError] = useState('');
   const [creatingChapter, setCreatingChapter] = useState(false);
 
@@ -120,10 +121,12 @@ export default function SubjectDetailScreen() {
     setChapterNameError('');
     setCreatingChapter(true);
     try {
-      const c = await createChapter(id!, newChapterName.trim(), chapters.length);
+      const desc = newChapterDesc.trim() || undefined;
+      const c = await createChapter(id!, newChapterName.trim(), desc, chapters.length);
       if (c) {
         setChapters((prev) => [...prev, c]);
         setNewChapterName('');
+        setNewChapterDesc('');
         setShowAddChapter(false);
         toast(`"${c.name}" created`, 'success');
       }
@@ -378,9 +381,16 @@ export default function SubjectDetailScreen() {
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1 }}>
                         <Text style={{ fontSize: 18 }}>📁</Text>
-                        <Text style={{ color: colors.text.primary, fontSize: typography.sizes.base, fontWeight: typography.weights.semibold, flex: 1 }}>
-                          {chapter.name}
-                        </Text>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ color: colors.text.primary, fontSize: typography.sizes.base, fontWeight: typography.weights.semibold }}>
+                            {chapter.name}
+                          </Text>
+                          {chapter.description && (
+                            <Text style={{ color: colors.text.muted, fontSize: typography.sizes.xs, marginTop: 2 }}>
+                              {chapter.description}
+                            </Text>
+                          )}
+                        </View>
                       </View>
                       <View style={{ flexDirection: 'row', gap: spacing.xs }}>
                         <Pressable
@@ -474,7 +484,7 @@ export default function SubjectDetailScreen() {
       {/* Add chapter modal */}
       <Modal
         visible={showAddChapter}
-        onClose={() => { setShowAddChapter(false); setNewChapterName(''); setChapterNameError(''); }}
+        onClose={() => { setShowAddChapter(false); setNewChapterName(''); setNewChapterDesc(''); setChapterNameError(''); }}
         title="New Chapter"
       >
         <View style={{ paddingHorizontal: spacing.lg, gap: spacing.md, paddingBottom: spacing.md }}>
@@ -485,8 +495,17 @@ export default function SubjectDetailScreen() {
             onChangeText={setNewChapterName}
             autoFocus
             error={chapterNameError}
+            returnKeyType="next"
+          />
+          <Input
+            label="Description (optional)"
+            placeholder="e.g. Fundamental concepts and definitions"
+            value={newChapterDesc}
+            onChangeText={setNewChapterDesc}
             returnKeyType="done"
             onSubmitEditing={handleAddChapter}
+            multiline
+            numberOfLines={2}
           />
           <Button
             label="Create Chapter"

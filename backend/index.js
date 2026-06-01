@@ -138,6 +138,27 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+app.post('/api/auth/reset-password', async (req, res) => {
+  const { email } = req.body;
+  if (!email) {
+    return res.status(400).json({ error: 'Email is required' });
+  }
+
+  try {
+    const user = await db.querySingle('SELECT id FROM users WHERE email = ?', [email.trim().toLowerCase()]);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Since this is a simulated local setup, we log the password reset request to the console
+    console.log(`[PASSWORD RESET SIMULATION] A reset password link request was received for: ${email.trim().toLowerCase()}`);
+    res.json({ success: true, message: 'Password reset link sent successfully (simulated).' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to process password reset' });
+  }
+});
+
 // ── USERS & PROFILES ──────────────────────────────────────────
 
 app.get('/api/users/profile/:userId', async (req, res) => {
@@ -160,6 +181,32 @@ app.put('/api/users/profile/:userId', async (req, res) => {
       'UPDATE users SET username = COALESCE(?, username), avatar_url = COALESCE(?, avatar_url) WHERE id = ?',
       [username, avatar_url, req.params.userId]
     );
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/users/profile/reset', authenticateToken, async (req, res) => {
+  const userId = req.user.id;
+  try {
+    await db.query(
+      'UPDATE users SET streak_days = 0, longest_streak = 0, consistency_multiplier = 1.00, crystal_balance = 50, total_study_seconds = 0 WHERE id = ?',
+      [userId]
+    );
+    await db.query('DELETE FROM study_sessions WHERE user_id = ?', [userId]);
+    await db.query('DELETE FROM streaks WHERE user_id = ?', [userId]);
+    await db.query('DELETE FROM rewards WHERE user_id = ?', [userId]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/users/profile', authenticateToken, async (req, res) => {
+  const userId = req.user.id;
+  try {
+    await db.query('DELETE FROM users WHERE id = ?', [userId]);
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -193,7 +240,7 @@ app.post('/api/subjects', async (req, res) => {
   try {
     await db.query(
       `INSERT INTO subjects (id, user_id, name, description, color, emoji) VALUES (?, ?, ?, ?, ?, ?)`,
-      [id, user_id, name, description, color || '#7c3aed', emoji || '📚']
+      [id, user_id, name, description || null, color || '#7c3aed', emoji || '📚']
     );
     const subject = await db.querySingle('SELECT * FROM subjects WHERE id = ?', [id]);
     res.json(subject);
@@ -212,12 +259,19 @@ app.put('/api/subjects/:id', async (req, res) => {
          color = COALESCE(?, color), 
          emoji = COALESCE(?, emoji) 
        WHERE id = ?`,
-      [name, description, color, emoji, req.params.id]
+      [
+        name || null,
+        description !== undefined ? description : null,
+        color || null,
+        emoji || null,
+        req.params.id
+      ]
     );
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
+
 });
 
 app.delete('/api/subjects/:id', async (req, res) => {
@@ -242,12 +296,12 @@ app.get('/api/chapters', async (req, res) => {
 });
 
 app.post('/api/chapters', async (req, res) => {
-  const { subject_id, name, order_index } = req.body;
+  const { subject_id, name, description, order_index } = req.body;
   const id = generateUUID();
   try {
     await db.query(
-      'INSERT INTO chapters (id, subject_id, name, order_index) VALUES (?, ?, ?, ?)',
-      [id, subject_id, name, order_index || 0]
+      'INSERT INTO chapters (id, subject_id, name, description, order_index) VALUES (?, ?, ?, ?, ?)',
+      [id, subject_id, name, description || null, order_index || 0]
     );
     const chapter = await db.querySingle('SELECT * FROM chapters WHERE id = ?', [id]);
     res.json(chapter);
@@ -257,17 +311,23 @@ app.post('/api/chapters', async (req, res) => {
 });
 
 app.put('/api/chapters/:id', async (req, res) => {
-  const { name, order_index } = req.body;
+  const { name, description, order_index } = req.body;
   try {
     await db.query(
-      'UPDATE chapters SET name = COALESCE(?, name), order_index = COALESCE(?, order_index) WHERE id = ?',
-      [name, order_index, req.params.id]
+      'UPDATE chapters SET name = COALESCE(?, name), description = COALESCE(?, description), order_index = COALESCE(?, order_index) WHERE id = ?',
+      [
+        name || null,
+        description !== undefined ? description : null,
+        order_index !== undefined ? order_index : null,
+        req.params.id
+      ]
     );
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
+
 
 app.delete('/api/chapters/:id', async (req, res) => {
   try {
@@ -1264,6 +1324,130 @@ app.post('/api/coop/rooms/:roomId/complete', authenticateToken, async (req, res)
   const { roomId } = req.params;
 
   try {
+    const nowStr = new Date().toISOString();
+    await db.query(
+      'UPDATE coop_rooms SET status = "completed", completed_at = ? WHERE id = ?',
+      [nowStr, roomId]
+    );
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
+// 11. Kick Member from Room (Creator only)
+app.delete('/api/coop/rooms/:roomId/members/:userId', authenticateToken, async (req, res) => {
+  const { roomId, userId } = req.params;
+  const requesterId = req.user.id;
+
+  try {
+    const room = await db.querySingle('SELECT created_by FROM coop_rooms WHERE id = ?', [roomId]);
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+    if (room.created_by !== requesterId) return res.status(403).json({ error: 'Only the creator can kick members' });
+    if (userId === requesterId) return res.status(400).json({ error: 'Cannot kick yourself' });
+
+    await db.query('DELETE FROM coop_room_members WHERE room_id = ? AND user_id = ?', [roomId, userId]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 12. Toggle Ready Status (Member only, in waiting state)
+app.post('/api/coop/rooms/:roomId/members/ready', authenticateToken, async (req, res) => {
+  const { roomId } = req.params;
+  const userId = req.user.id;
+  const { ready } = req.body; // true = ready (accepted), false = not ready (joined)
+
+  try {
+    const newStatus = ready ? 'accepted' : 'joined';
+    await db.query(
+      'UPDATE coop_room_members SET status = ? WHERE room_id = ? AND user_id = ?',
+      [newStatus, roomId, userId]
+    );
+    res.json({ success: true, status: newStatus });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 13. Start Timer (Creator only - all members must be ready)
+app.post('/api/coop/rooms/:roomId/start-timer', authenticateToken, async (req, res) => {
+  const { roomId } = req.params;
+  const requesterId = req.user.id;
+
+  try {
+    const room = await db.querySingle('SELECT created_by, status FROM coop_rooms WHERE id = ?', [roomId]);
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+    if (room.created_by !== requesterId) return res.status(403).json({ error: 'Only the creator can start the session' });
+    if (room.status !== 'waiting') return res.status(400).json({ error: 'Room is not in waiting state' });
+
+    const members = await db.query('SELECT user_id, status FROM coop_room_members WHERE room_id = ?', [roomId]);
+    const notReady = members.filter(m => m.user_id !== requesterId && m.status !== 'accepted');
+    if (notReady.length > 0) return res.status(400).json({ error: 'Not all members are ready' });
+
+    const nowStr = new Date().toISOString();
+    await db.query('UPDATE coop_rooms SET status = "active", started_at = ? WHERE id = ?', [nowStr, roomId]);
+    await db.query('UPDATE coop_room_members SET status = "active" WHERE room_id = ?', [roomId]);
+    res.json({ success: true, started_at: nowStr });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 14. Pause Timer (any member)
+app.post('/api/coop/rooms/:roomId/pause', authenticateToken, async (req, res) => {
+  const { roomId } = req.params;
+
+  try {
+    const room = await db.querySingle('SELECT status, is_paused FROM coop_rooms WHERE id = ?', [roomId]);
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+    if (room.status !== 'active') return res.status(400).json({ error: 'Room is not active' });
+    if (room.is_paused) return res.json({ success: true, already: true });
+
+    const nowStr = new Date().toISOString();
+    await db.query('UPDATE coop_rooms SET is_paused = 1, paused_at = ? WHERE id = ?', [nowStr, roomId]);
+    res.json({ success: true, paused_at: nowStr });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 15. Resume Timer (any member)
+app.post('/api/coop/rooms/:roomId/resume', authenticateToken, async (req, res) => {
+  const { roomId } = req.params;
+
+  try {
+    const room = await db.querySingle('SELECT status, is_paused, paused_at, paused_seconds FROM coop_rooms WHERE id = ?', [roomId]);
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+    if (room.status !== 'active') return res.status(400).json({ error: 'Room is not active' });
+    if (!room.is_paused) return res.json({ success: true, already: true });
+
+    const pausedDurationMs = room.paused_at ? (Date.now() - new Date(room.paused_at).getTime()) : 0;
+    const addedSeconds = Math.round(pausedDurationMs / 1000);
+    const newPausedSeconds = (room.paused_seconds || 0) + addedSeconds;
+
+    await db.query(
+      'UPDATE coop_rooms SET is_paused = 0, paused_at = NULL, paused_seconds = ? WHERE id = ?',
+      [newPausedSeconds, roomId]
+    );
+    res.json({ success: true, paused_seconds: newPausedSeconds });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 16. Abandon Session (any member can stop, marks room completed)
+app.post('/api/coop/rooms/:roomId/abandon', authenticateToken, async (req, res) => {
+  const { roomId } = req.params;
+  const userId = req.user.id;
+
+  try {
+    await db.query(
+      'UPDATE coop_room_members SET status = "abandoned" WHERE room_id = ? AND user_id = ?',
+      [roomId, userId]
+    );
     const nowStr = new Date().toISOString();
     await db.query(
       'UPDATE coop_rooms SET status = "completed", completed_at = ? WHERE id = ?',
