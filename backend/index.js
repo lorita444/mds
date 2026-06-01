@@ -1476,6 +1476,39 @@ app.post('/api/coop/rooms/:roomId/abandon', authenticateToken, async (req, res) 
 });
 
 
+// ── OLLAMA PROXY ─────────────────────────────────────────────
+// Routes Ollama through the backend so physical devices don't need
+// a direct path to port 11434 (Ollama binds to 127.0.0.1 by default).
+
+const OLLAMA_LOCAL = process.env.OLLAMA_URL || 'http://localhost:11434';
+
+app.get('/api/ollama/health', async (req, res) => {
+  try {
+    const r = await fetch(`${OLLAMA_LOCAL}/api/tags`, { signal: AbortSignal.timeout(4000) });
+    res.json({ ok: r.ok });
+  } catch {
+    res.json({ ok: false });
+  }
+});
+
+app.post('/api/ollama/chat', async (req, res) => {
+  try {
+    const r = await fetch(`${OLLAMA_LOCAL}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body),
+    });
+    if (!r.ok) {
+      const text = await r.text().catch(() => r.statusText);
+      return res.status(r.status).json({ error: text });
+    }
+    const data = await r.json();
+    res.json(data);
+  } catch (err) {
+    res.status(503).json({ error: `Ollama unreachable: ${err.message}` });
+  }
+});
+
 // Start Express Server
 db.initializeDatabase().then(() => {
   app.listen(PORT, () => {

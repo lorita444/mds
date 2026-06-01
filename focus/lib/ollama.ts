@@ -1,19 +1,18 @@
 /**
- * Ollama local LLM integration.
+ * Ollama local LLM integration — proxied through the Express backend.
  *
- * Ollama exposes an OpenAI-compatible REST API at http://localhost:11434
- * Set EXPO_PUBLIC_OLLAMA_URL in .env to override (e.g. for physical devices
- * use your machine's LAN IP: http://192.168.1.x:11434)
+ * All calls go to the backend's /api/ollama/* routes so the phone
+ * doesn't need a direct path to port 11434 (Ollama binds to 127.0.0.1).
  *
- * Recommended models (run: ollama pull <model>):
- *   - llama3.2        — fast, great for Q&A and explanations
- *   - mistral         — balanced speed/quality
- *   - qwen2.5:7b      — excellent structured output
- *   - nomic-embed-text — for embeddings (if vector search needed)
+ * The backend must be running and Ollama must be running on the same machine.
+ * Start Ollama: ollama serve
+ * Recommended model: ollama pull llama3.2
  */
 
-const OLLAMA_BASE =
-  process.env.EXPO_PUBLIC_OLLAMA_URL ?? 'http://localhost:11434';
+import { API_URL } from './supabase';
+
+// Strip the trailing /api to get the base host, then use /api/ollama/...
+const OLLAMA_PROXY = `${API_URL}/ollama`;
 
 const CHAT_MODEL =
   process.env.EXPO_PUBLIC_OLLAMA_MODEL ?? 'llama3.2';
@@ -27,7 +26,7 @@ export async function ollamaChat(
   messages: Message[],
   opts: { temperature?: number; maxTokens?: number } = {},
 ): Promise<string> {
-  const res = await fetch(`${OLLAMA_BASE}/api/chat`, {
+  const res = await fetch(`${OLLAMA_PROXY}/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -63,17 +62,17 @@ export async function answerWithContext(
   const messages: Message[] = [
     {
       role: 'system',
-      content: `Ești un asistent de studiu expert pentru materia "${subjectName}".
-Răspunde clar, concis și structurat în aceeași limbă cu întrebarea.
-Dacă ai context din materiale, bazează-te pe el. Dacă nu, spune-o sincer.
-Folosește bullet points sau numerotare când ajută la claritate.
-Nu inventa informații. Încurajează înțelegerea profundă, nu memorarea mecanică.`,
+      content: `You are an expert study assistant for the subject "${subjectName}".
+Respond clearly, concisely, and in the same language as the question.
+If you have context from uploaded materials, base your answer on them. If not, say so honestly.
+Use bullet points or numbered lists when they aid clarity.
+Never invent information. Encourage deep understanding, not rote memorization.`,
     },
     ...(context.trim()
       ? [
           {
             role: 'system' as Role,
-            content: `Context din materialele uploadate:\n\n${context.slice(0, 8000)}`,
+            content: `Context from uploaded materials:\n\n${context.slice(0, 8000)}`,
           },
         ]
       : []),
@@ -97,26 +96,26 @@ export async function explainCourse(
   const messages: Message[] = [
     {
       role: 'system',
-      content: `Ești un profesor expert. Explici materii complexe într-un mod clar, structurat și complet.
-Răspunde ÎNTOTDEAUNA în aceeași limbă cu materia (română dacă e în română, engleză dacă e în engleză).
-Structura ta trebuie să conțină:
-1. Introducere și context (de ce e importantă materia)
-2. Concepte fundamentale (explicate simplu, cu exemple)
-3. Conexiuni între capitole
-4. Puncte cheie de reținut
-5. Sfaturi de studiu pentru această materie
-Folosește titluri clare (##), bullet points și exemple concrete.`,
+      content: `You are an expert teacher. You explain complex subjects clearly, structurally, and completely.
+Always respond in the same language as the subject name.
+Your response must include:
+1. Introduction and context (why this subject matters)
+2. Core concepts (explained simply, with examples)
+3. Connections between chapters
+4. Key takeaways
+5. Study tips for this subject
+Use clear headings (##), bullet points, and concrete examples.`,
     },
     {
       role: 'user',
-      content: `Explică-mi materia "${subjectName}" în mod complet și structurat.
+      content: `Explain the subject "${subjectName}" completely and in a structured way.
 
-Capitole:
-${chaptersText || '  (niciun capitol definit încă)'}
+Chapters:
+${chaptersText || '  (no chapters defined yet)'}
 
-${summariesText ? `Rezumate materiale disponibile:\n${summariesText.slice(0, 6000)}` : ''}
+${summariesText ? `Available material summaries:\n${summariesText.slice(0, 6000)}` : ''}
 
-Creează o explicație completă, pedagogică și bine structurată.`,
+Create a complete, pedagogical, and well-structured explanation.`,
     },
   ];
 
@@ -139,13 +138,13 @@ export async function generateFlashcardsFromText(
     [
       {
         role: 'system',
-        content: `Ești un generator de flashcard-uri pentru ${context}.
-Returnează DOAR un array JSON valid, fără text suplimentar, fără markdown.
+        content: `You are a flashcard generator for ${context}.
+Return ONLY a valid JSON array, no extra text, no markdown.
 Format: [{"question":"...","answer":"...","difficulty":"easy"|"medium"|"hard"}]`,
       },
       {
         role: 'user',
-        content: `Generează ${count} flashcard-uri de calitate din acest material:\n\n${text.slice(0, 8000)}`,
+        content: `Generate ${count} high-quality flashcards from this material:\n\n${text.slice(0, 8000)}`,
       },
     ],
     { temperature: 0.5, maxTokens: 2048 },
@@ -180,10 +179,10 @@ export async function generateQuizFromContext(
     [
       {
         role: 'system',
-        content: `Ești un generator de quiz pentru "${subjectName}".
-Generează exact ${questionCount} întrebări. Returnează DOAR JSON valid, fără text.
+        content: `You are a quiz generator for "${subjectName}".
+Generate exactly ${questionCount} questions. Return ONLY valid JSON, no extra text.
 Format: [{"question_text":"...","question_type":"multiple_choice"|"true_false"|"short_answer","options":["A","B","C","D"]|null,"correct_answer":"..."}]
-Pentru multiple_choice: 4 opțiuni, correct_answer = una dintre ele.`,
+For multiple_choice: 4 options, correct_answer = one of them.`,
       },
       { role: 'user', content: context.slice(0, 8000) },
     ],
@@ -212,10 +211,10 @@ export async function estimateStudyDuration(
     [
       {
         role: 'system',
-        content: `Ești un planificator de studiu. Estimează durata unei sesiuni de studiu focusată pentru "${subjectName}".
-Returnează DOAR JSON: {"minutes":<număr>,"reasoning":"<un propoziție>"}`,
+        content: `You are a study planner. Estimate the duration of a focused study session for "${subjectName}".
+Return ONLY JSON: {"minutes":<number>,"reasoning":"<one sentence>"}`,
       },
-      { role: 'user', content: text || 'Nu sunt materiale disponibile.' },
+      { role: 'user', content: text || 'No materials available.' },
     ],
     { temperature: 0.3, maxTokens: 256 },
   );
@@ -227,7 +226,7 @@ Returnează DOAR JSON: {"minutes":<număr>,"reasoning":"<un propoziție>"}`,
     if (start === -1) throw new Error('No JSON');
     return JSON.parse(cleaned.slice(start, end + 1));
   } catch {
-    return { minutes: 45, reasoning: 'Estimat bazat pe complexitatea generală a materiei.' };
+    return { minutes: 45, reasoning: 'Estimated based on general subject complexity.' };
   }
 }
 
@@ -243,12 +242,110 @@ export function chunkText(text: string, chunkSize = 800, overlap = 100): string[
   return chunks;
 }
 
+// ── EXPLAIN WRONG ANSWERS ─────────────────────────────────────
+
+export async function explainWrongAnswers(
+  wrongs: { question: string; correctAnswer: string; userAnswer: string }[],
+  subjectName: string,
+): Promise<{ question: string; explanation: string }[]> {
+  if (wrongs.length === 0) return [];
+  const list = wrongs
+    .map(
+      (w, i) =>
+        `${i + 1}. Q: "${w.question}"\n   Corect: "${w.correctAnswer}"\n   Răspuns dat: "${w.userAnswer || '(niciun răspuns)'}"`,
+    )
+    .join('\n\n');
+  const reply = await ollamaChat(
+    [
+      {
+        role: 'system',
+        content: `You are a study assistant for "${subjectName}". For each wrong answer, give a SHORT explanation (1-2 sentences) of why the correct answer is correct. Return ONLY a valid JSON array, no extra text: [{"question":"...","explanation":"..."}]. One item per question, in the same order.`,
+      },
+      { role: 'user', content: list },
+    ],
+    { temperature: 0.3, maxTokens: 1024 },
+  );
+  try {
+    const cleaned = reply.replace(/```json|```/g, '').trim();
+    const start = cleaned.indexOf('[');
+    const end = cleaned.lastIndexOf(']');
+    if (start === -1 || end === -1) throw new Error('No JSON array');
+    return JSON.parse(cleaned.slice(start, end + 1));
+  } catch {
+    return wrongs.map((w) => ({ question: w.question, explanation: 'No explanation available.' }));
+  }
+}
+
+// ── RECOMMEND WEAK CHAPTERS ────────────────────────────────────
+
+export function recommendWeakChapters(
+  quizHistory: { chapterIds: string[]; correctAnswers: number; totalQuestions: number }[],
+  chapters: { id: string; name: string }[],
+): { chapterId: string; reason: string }[] {
+  if (quizHistory.length === 0 || chapters.length === 0) return [];
+
+  const chapterStats = chapters
+    .map((ch) => {
+      const relevant = quizHistory.filter((h) => h.chapterIds.includes(ch.id));
+      if (relevant.length === 0) return null;
+      const totalCorrect = relevant.reduce((s, h) => s + h.correctAnswers, 0);
+      const totalQ = relevant.reduce((s, h) => s + h.totalQuestions, 0);
+      const pct = totalQ > 0 ? Math.round((totalCorrect / totalQ) * 100) : null;
+      if (pct === null) return null;
+      return { id: ch.id, pct };
+    })
+    .filter(Boolean) as { id: string; pct: number }[];
+
+  return chapterStats
+    .filter((c) => c.pct < 70)
+    .map((c) => ({ chapterId: c.id, reason: `${c.pct}% on past quizzes` }));
+}
+
+// ── GENERATE STUDY PLAN ────────────────────────────────────────
+
+export async function generateStudyPlan(
+  subjects: { name: string; description: string | null }[],
+  examDate: string,
+  todayDate: string,
+  hoursPerDay: number,
+): Promise<{ day: string; tasks: { subject: string; task: string; minutes: number }[] }[]> {
+  const daysLeft = Math.max(
+    1,
+    Math.round((new Date(examDate).getTime() - new Date(todayDate).getTime()) / 86400000),
+  );
+  const maxDays = Math.min(daysLeft, 14);
+  const subjectList = subjects
+    .map((s) => `- ${s.name}${s.description ? `: ${s.description}` : ''}`)
+    .join('\n');
+
+  const reply = await ollamaChat(
+    [
+      {
+        role: 'system',
+        content: `You are a study planner. Generate a plan for ${daysLeft} days (starting tomorrow, until ${examDate}), with ${hoursPerDay}h available per day. Return ONLY a valid JSON array, no extra text (max ${maxDays} days): [{"day":"YYYY-MM-DD","tasks":[{"subject":"...","task":"...","minutes":<number>}]}]. Tasks should be specific (e.g., "Review Chapter 2"). Distribute subjects evenly.`,
+      },
+      { role: 'user', content: `Subjects:\n${subjectList}` },
+    ],
+    { temperature: 0.4, maxTokens: 2048 },
+  );
+  try {
+    const cleaned = reply.replace(/```json|```/g, '').trim();
+    const start = cleaned.indexOf('[');
+    const end = cleaned.lastIndexOf(']');
+    if (start === -1 || end === -1) throw new Error('No JSON array');
+    return JSON.parse(cleaned.slice(start, end + 1));
+  } catch {
+    return [];
+  }
+}
+
 // ── HEALTH CHECK ───────────────────────────────────────────────
 
 export async function isOllamaRunning(): Promise<boolean> {
   try {
-    const res = await fetch(`${OLLAMA_BASE}/api/tags`, { signal: AbortSignal.timeout(3000) });
-    return res.ok;
+    const res = await fetch(`${OLLAMA_PROXY}/health`, { signal: AbortSignal.timeout(4000) });
+    const json = await res.json();
+    return json.ok === true;
   } catch {
     return false;
   }

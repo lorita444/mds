@@ -329,13 +329,32 @@ export default function UniverseScreen() {
                 </ScrollView>
 
                 {grouped[activeSection] && (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.md, paddingVertical: 4 }}>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}>
                     {grouped[activeSection].map((item) => (
-                      <View key={item.id}>
+                      <View
+                        key={item.id}
+                        style={{
+                          width: '46%',
+                          backgroundColor: colors.bg.card,
+                          borderWidth: 1,
+                          borderColor: colors.rarity[item.rarity as Rarity]?.glow ?? colors.bg.cardBorder,
+                          borderRadius: radius.xl,
+                          padding: spacing.md,
+                          alignItems: 'center',
+                          gap: spacing.xs,
+                        }}
+                      >
                         <ItemRenderer item={item} />
+                        <View style={{ alignSelf: 'stretch', alignItems: 'center' }}>
+                          <View style={{ backgroundColor: colors.rarity[item.rarity as Rarity]?.bg ?? colors.bg.elevated, borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 2, marginTop: 2 }}>
+                            <Text style={{ color: colors.rarity[item.rarity as Rarity]?.color ?? colors.text.muted, fontSize: typography.sizes.xs, fontWeight: typography.weights.semibold, textTransform: 'capitalize' }}>
+                              {item.rarity}
+                            </Text>
+                          </View>
+                        </View>
                       </View>
                     ))}
-                  </ScrollView>
+                  </View>
                 )}
               </View>
             )}
@@ -343,13 +362,33 @@ export default function UniverseScreen() {
             {/* Empty universe */}
             {!hasItems && (
               <Card variant="flat" padding={spacing.xl}>
-                <View style={{ alignItems: 'center', gap: spacing.sm }}>
-                  <Text style={{ color: colors.text.primary, fontSize: typography.sizes.md, fontWeight: typography.weights.bold, textAlign: 'center' }}>
-                    Your universe awaits
-                  </Text>
-                  <Text style={{ color: colors.text.secondary, fontSize: typography.sizes.sm, textAlign: 'center', lineHeight: 20 }}>
-                    Complete missions to populate your universe with planets, aliens, and cosmic structures.
-                  </Text>
+                <View style={{ alignItems: 'center', gap: spacing.md }}>
+                  <Text style={{ fontSize: 40 }}>🌌</Text>
+                  <View style={{ alignItems: 'center', gap: spacing.xs }}>
+                    <Text style={{ color: colors.text.primary, fontSize: typography.sizes.md, fontWeight: typography.weights.bold, textAlign: 'center' }}>
+                      Your universe awaits
+                    </Text>
+                    <Text style={{ color: colors.text.secondary, fontSize: typography.sizes.sm, textAlign: 'center', lineHeight: 20 }}>
+                      Complete missions to populate your universe with planets, aliens, and cosmic structures.
+                    </Text>
+                  </View>
+                  <Pressable
+                    onPress={() => setShowMissionModal(true)}
+                    style={({ pressed }) => ({
+                      paddingVertical: spacing.sm + 2,
+                      paddingHorizontal: spacing.xl,
+                      borderRadius: radius.lg,
+                      borderWidth: 1,
+                      borderColor: colors.cosmic.purpleGlow,
+                      backgroundColor: pressed ? 'rgba(124,58,237,0.2)' : colors.cosmic.purpleFaint,
+                      opacity: pressed ? 0.85 : 1,
+                      transform: [{ scale: pressed ? 0.97 : 1 }],
+                    })}
+                  >
+                    <Text style={{ color: colors.cosmic.purpleLight, fontSize: typography.sizes.sm, fontWeight: typography.weights.semibold }}>
+                      Start First Mission →
+                    </Text>
+                  </Pressable>
                 </View>
               </Card>
             )}
@@ -390,7 +429,19 @@ export default function UniverseScreen() {
                   <Text style={{ color: colors.text.secondary, fontSize: typography.sizes.xs, fontWeight: typography.weights.semibold, letterSpacing: typography.tracking.widest, textTransform: 'uppercase' }}>
                     Recent Rewards
                   </Text>
-                  <Pressable onPress={() => router.push('/rewards-history' as never)}>
+                  <Pressable
+                    onPress={() => router.push('/rewards-history' as never)}
+                    style={({ pressed }) => ({
+                      paddingVertical: 4,
+                      paddingHorizontal: 10,
+                      borderRadius: radius.md,
+                      borderWidth: 1,
+                      borderColor: colors.cosmic.purpleGlow,
+                      backgroundColor: colors.cosmic.purpleFaint,
+                      opacity: pressed ? 0.7 : 1,
+                      transform: [{ scale: pressed ? 0.96 : 1 }],
+                    })}
+                  >
                     <Text style={{ color: colors.cosmic.purpleLight, fontSize: typography.sizes.xs, fontWeight: typography.weights.bold }}>
                       View All ›
                     </Text>

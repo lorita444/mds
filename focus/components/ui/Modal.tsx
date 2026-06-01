@@ -6,6 +6,7 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { colors, radius, spacing, typography } from '../../utils/theme';
 
@@ -37,34 +38,35 @@ export function Modal({
       onRequestClose={onClose}
     >
       {/* Backdrop — tap to dismiss */}
-      <Pressable
-        onPress={onClose}
-        style={{
-          flex: 1,
-          backgroundColor: colors.bg.overlay,
-          justifyContent: 'flex-end',
-        }}
-      >
-        {/* KeyboardAvoidingView wraps the sheet so it lifts when keyboard opens */}
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      <TouchableWithoutFeedback onPress={onClose}>
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: colors.bg.overlay,
+            justifyContent: 'flex-end',
+          }}
         >
-          {/* Inner pressable stops backdrop tap from closing when touching sheet */}
-          <Pressable
-            style={{
-              backgroundColor: colors.bg.elevated,
-              borderTopLeftRadius: radius.xxl,
-              borderTopRightRadius: radius.xxl,
-              borderTopWidth: 1,
-              borderTopColor: colors.bg.cardBorder,
-              borderLeftWidth: 1,
-              borderLeftColor: colors.bg.cardBorder,
-              borderRightWidth: 1,
-              borderRightColor: colors.bg.cardBorder,
-              paddingTop: spacing.md,
-              paddingBottom: spacing.xl + 8,
-            }}
+          {/* KeyboardAvoidingView wraps the sheet so it lifts when keyboard opens */}
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           >
+            {/* Plain View — no Pressable wrapper so TextInput gets the first tap */}
+            <TouchableWithoutFeedback>
+            <View
+              style={{
+                backgroundColor: colors.bg.elevated,
+                borderTopLeftRadius: radius.xxl,
+                borderTopRightRadius: radius.xxl,
+                borderTopWidth: 1,
+                borderTopColor: colors.bg.cardBorder,
+                borderLeftWidth: 1,
+                borderLeftColor: colors.bg.cardBorder,
+                borderRightWidth: 1,
+                borderRightColor: colors.bg.cardBorder,
+                paddingTop: spacing.md,
+                paddingBottom: spacing.xl + 8,
+              }}
+            >
             {/* Drag handle */}
             <View
               style={{
@@ -121,12 +123,17 @@ export function Modal({
               </View>
             )}
 
-            <Content style={scrollable ? { maxHeight: 480 } : undefined}>
+            <Content
+              style={scrollable ? { maxHeight: 480 } : undefined}
+              {...(scrollable ? { keyboardShouldPersistTaps: 'handled' } : {})}
+            >
               {children}
             </Content>
-          </Pressable>
-        </KeyboardAvoidingView>
-      </Pressable>
+            </View>
+            </TouchableWithoutFeedback>
+          </KeyboardAvoidingView>
+        </View>
+      </TouchableWithoutFeedback>
     </RNModal>
   );
 }

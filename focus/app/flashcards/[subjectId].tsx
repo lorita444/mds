@@ -112,8 +112,18 @@ function FlashCard({ card, onKnown, onNeedsReview, onDelete }: {
             </Text>
           </View>
         </View>
-        <Pressable onPress={onDelete}>
-          <Text style={{ color: colors.text.muted, fontSize: 16 }}>✕</Text>
+        <Pressable
+          onPress={onDelete}
+          hitSlop={12}
+          style={({ pressed }) => ({
+            width: 28, height: 28,
+            borderRadius: 14,
+            backgroundColor: pressed ? colors.status.errorFaint : 'transparent',
+            alignItems: 'center',
+            justifyContent: 'center',
+          })}
+        >
+          <Text style={{ color: colors.text.muted, fontSize: 14 }}>✕</Text>
         </Pressable>
       </View>
 
@@ -338,7 +348,11 @@ export default function FlashcardsScreen() {
     >
       {/* Header */}
       <View style={{ gap: spacing.xs }}>
-        <Pressable onPress={() => router.back()}>
+        <Pressable
+          onPress={() => router.back()}
+          style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, alignSelf: 'flex-start' })}
+          hitSlop={12}
+        >
           <Text style={{ color: colors.text.muted, fontSize: typography.sizes.sm }}>‹ Back</Text>
         </Pressable>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>

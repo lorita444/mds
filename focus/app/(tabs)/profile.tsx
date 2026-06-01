@@ -236,7 +236,11 @@ export default function ProfileScreen() {
     );
   };
 
-  const totalStudyMinutes = Math.floor((profile?.total_study_seconds ?? 0) / 60);
+  const totalStudySecs = profile?.total_study_seconds ?? 0;
+  const totalStudyMinutes = Math.floor(totalStudySecs / 60);
+  const totalStudyDisplay = totalStudyMinutes >= 60
+    ? `${Math.floor(totalStudyMinutes / 60)}h ${totalStudyMinutes % 60}m`
+    : `${totalStudyMinutes}m`;
   const activeStreakDays = profile?.streak_days ?? 0;
 
   return (
@@ -366,7 +370,7 @@ export default function ProfileScreen() {
                   fontWeight: typography.weights.bold,
                 }}
               >
-                {totalStudyMinutes}m
+                {totalStudyDisplay}
               </Text>
               <Text style={{ color: colors.text.muted, fontSize: typography.sizes.xs }}>
                 Total study
@@ -483,7 +487,8 @@ export default function ProfileScreen() {
             flexDirection: 'row',
             alignItems: 'center',
             gap: spacing.md,
-            opacity: pressed ? 0.75 : 1,
+            opacity: pressed ? 0.8 : 1,
+            transform: [{ scale: pressed ? 0.98 : 1 }],
           })}
         >
           <Text style={{ fontSize: 20 }}>🏆</Text>
@@ -495,9 +500,9 @@ export default function ProfileScreen() {
               fontWeight: typography.weights.medium,
             }}
           >
-            Reward History (Istoric Premii)
+            Reward History
           </Text>
-          <Text style={{ color: colors.text.muted, fontSize: 16 }}>›</Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.text.muted} />
         </Pressable>
 
         {/* Settings */}
@@ -512,10 +517,11 @@ export default function ProfileScreen() {
             flexDirection: 'row',
             alignItems: 'center',
             gap: spacing.md,
-            opacity: pressed ? 0.75 : 1,
+            opacity: pressed ? 0.8 : 1,
+            transform: [{ scale: pressed ? 0.98 : 1 }],
           })}
         >
-          <Text style={{ fontSize: 20 }}>⚙️</Text>
+          <Ionicons name="settings-sharp" size={20} color={colors.text.secondary} />
           <Text
             style={{
               flex: 1,
@@ -524,9 +530,9 @@ export default function ProfileScreen() {
               fontWeight: typography.weights.medium,
             }}
           >
-            Cosmic Settings (Setări aplicație)
+            Settings
           </Text>
-          <Text style={{ color: colors.text.muted, fontSize: 16 }}>›</Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.text.muted} />
         </Pressable>
       </View>
 

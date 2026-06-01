@@ -28,11 +28,11 @@ import { LoadingState } from '../../components/ui/LoadingState';
 import type { AIChatMessage } from '../../lib/types';
 
 const QUICK_PROMPTS = [
-  '📋 Rezumă conceptele cheie',
-  '📖 Care sunt definițiile principale?',
-  '🗺️ Creează un plan de studiu',
-  '🔍 Explică cel mai complex concept',
-  '⭐ Pe ce să mă concentrez?',
+  '📋 Summarize the key concepts',
+  '📖 What are the main definitions?',
+  '🗺️ Create a study plan',
+  '🔍 Explain the most complex concept',
+  '⭐ What should I focus on?',
 ];
 
 export default function AIChatScreen() {
@@ -129,8 +129,8 @@ export default function AIChatScreen() {
         });
       }
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Eroare la răspuns AI';
-      Alert.alert('Eroare AI', `${msg}\n\nAsigură-te că Ollama rulează pe computer.`);
+      const msg = e instanceof Error ? e.message : 'AI response error';
+      Alert.alert('AI Error', `${msg}\n\nMake sure Ollama is running on your computer.`);
       setMessages((prev) => prev.filter((m) => m.id !== userMsg.id));
     } finally {
       setSending(false);
@@ -146,7 +146,7 @@ export default function AIChatScreen() {
       subject_id: subjectId!,
       user_id: user!.id,
       role: 'assistant',
-      content: '🔄 Generez o explicație completă a cursului...',
+      content: '🔄 Generating a complete course explanation...',
       created_at: new Date().toISOString(),
     };
     setMessages((prev) => [...prev, {
@@ -154,12 +154,12 @@ export default function AIChatScreen() {
       subject_id: subjectId!,
       user_id: user!.id,
       role: 'user',
-      content: '📖 Explică-mi cursul complet și structurat',
+      content: '📖 Explain the full course in a clear structure',
       created_at: new Date().toISOString(),
     }, loadingMsg]);
 
     try {
-      await saveMessage(subjectId!, user!.id, 'user', '📖 Explică-mi cursul complet și structurat');
+      await saveMessage(subjectId!, user!.id, 'user', '📖 Explain the full course in a clear structure');
 
       const explanation = await explainCourse(
         subjectName,
@@ -176,13 +176,13 @@ export default function AIChatScreen() {
       });
     } catch (e) {
       setMessages((prev) => prev.filter((m) => m.id !== 'explain-loading'));
-      Alert.alert('Eroare', 'Nu am putut genera explicația. Verifică că Ollama rulează.');
+      Alert.alert('Error', 'Could not generate the explanation. Make sure Ollama is running.');
     } finally {
       setExplaining(false);
     }
   };
 
-  if (loading) return <LoadingState message="Se încarcă chat-ul..." />;
+  if (loading) return <LoadingState message="Loading chat..." />;
 
   return (
     <KeyboardAvoidingView
@@ -209,7 +209,7 @@ export default function AIChatScreen() {
       {ollamaOk === false && (
         <View style={styles.warningBanner}>
           <Text style={styles.warningText}>
-            ⚠️ Ollama nu rulează. Pornește Ollama pe computer: <Text style={{ fontWeight: '700' }}>ollama serve</Text>
+            ⚠️ Ollama is not running. Start it on your computer: <Text style={{ fontWeight: '700' }}>ollama serve</Text>
           </Text>
         </View>
       )}
@@ -218,7 +218,7 @@ export default function AIChatScreen() {
       {!hasMaterials && ollamaOk !== false && (
         <View style={styles.infoBanner}>
           <Text style={styles.infoText}>
-            💡 Nu ai materiale uploadate. Uploadează PDF-uri sau notițe pentru răspunsuri mai precise.
+            💡 No materials uploaded. Upload PDFs or notes for more accurate answers.
           </Text>
         </View>
       )}
@@ -233,7 +233,7 @@ export default function AIChatScreen() {
         ]}
       >
         <Text style={styles.explainBtnText}>
-          {explaining ? '⏳ Se generează...' : '📖 Explică Cursul Complet'}
+          {explaining ? '⏳ Generating...' : '📖 Explain Full Course'}
         </Text>
       </Pressable>
 
@@ -248,11 +248,11 @@ export default function AIChatScreen() {
         {messages.length === 0 && (
           <View style={styles.emptyState}>
             <Image source={AI_AVATAR} style={{ width: 72, height: 72 }} resizeMode="contain" />
-            <Text style={styles.emptyTitle}>Întreabă-mă orice despre {subjectName}</Text>
+            <Text style={styles.emptyTitle}>Ask me anything about {subjectName}</Text>
             <Text style={styles.emptySubtitle}>
               {hasMaterials
-                ? 'Am acces la materialele tale și voi răspunde din ele.'
-                : 'Poți folosi butonul de mai sus pentru o explicație completă a cursului.'}
+                ? 'I have access to your materials and will answer from them.'
+                : 'Use the button above for a complete course explanation.'}
             </Text>
             <View style={styles.quickPrompts}>
               {QUICK_PROMPTS.map((p) => (
@@ -277,7 +277,7 @@ export default function AIChatScreen() {
             ]}
           >
             {m.role === 'assistant' && (
-              <Text style={styles.assistantLabel}>AI · {subjectName}</Text>
+              <Text style={styles.assistantLabel}>StudyVerse AI · {subjectName}</Text>
             )}
             <View
               style={[
@@ -296,7 +296,7 @@ export default function AIChatScreen() {
           <View style={[styles.messageBubbleWrapper, { alignSelf: 'flex-start' }]}>
             <View style={[styles.messageBubble, styles.aiBubble, { flexDirection: 'row', gap: spacing.sm }]}>
               <ActivityIndicator size="small" color={colors.cosmic.purpleLight} />
-              <Text style={styles.messageText}>Gândesc...</Text>
+              <Text style={styles.messageText}>Thinking…</Text>
             </View>
           </View>
         )}
@@ -306,7 +306,7 @@ export default function AIChatScreen() {
       <View style={[styles.inputBar, { paddingBottom: insets.bottom + spacing.sm }]}>
         <View style={{ flex: 1 }}>
           <Input
-            placeholder="Întreabă despre materiale..."
+            placeholder="Ask about your materials..."
             value={input}
             onChangeText={setInput}
             multiline

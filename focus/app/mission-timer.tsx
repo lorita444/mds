@@ -228,6 +228,27 @@ export default function MissionTimerScreen() {
         size="lg"
       />
 
+      {/* Progress bar */}
+      <View style={{ marginTop: spacing.lg, gap: spacing.xs }}>
+        <View style={{ height: 6, backgroundColor: colors.bg.input, borderRadius: radius.full, overflow: 'hidden' }}>
+          <View
+            style={{
+              height: '100%',
+              width: `${Math.min(100, elapsedPct)}%`,
+              borderRadius: radius.full,
+              backgroundColor:
+                elapsedPct >= 95 ? colors.status.success
+                : elapsedPct >= 75 ? colors.cosmic.teal
+                : elapsedPct >= 50 ? colors.cosmic.purpleLight
+                : colors.cosmic.purple,
+            }}
+          />
+        </View>
+        <Text style={{ color: colors.text.dim, fontSize: typography.sizes.xs, textAlign: 'right' }}>
+          {elapsedPct}% complete
+        </Text>
+      </View>
+
       {/* Badges */}
       <View
         style={{
