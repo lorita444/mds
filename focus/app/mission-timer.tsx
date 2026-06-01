@@ -13,6 +13,12 @@ import { colors, spacing, typography, radius } from '../utils/theme';
 import { Button } from '../components/ui/Button';
 import { TimerDisplay } from '../components/ui/TimerDisplay';
 import { Card } from '../components/ui/Card';
+import {
+  scheduleActiveSessionTimer,
+  cancelActiveSessionNotifications,
+  scheduleUnfinishedSessionReminder,
+  cancelUnfinishedSessionReminder,
+} from '../lib/notifications';
 
 export default function MissionTimerScreen() {
   const router = useRouter();
@@ -110,13 +116,27 @@ export default function MissionTimerScreen() {
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active' && phase === 'running') {
-        const rem = Math.max(0, Math.round((endTimeRef.current - Date.now()) / 1000));
-        setRemaining(rem);
-        if (rem === 0) doCompleteRef.current();
+      if (state === 'active') {
+        cancelActiveSessionNotifications().catch(() => {});
+        cancelUnfinishedSessionReminder().catch(() => {});
+
+        if (phase === 'running') {
+          const rem = Math.max(0, Math.round((endTimeRef.current - Date.now()) / 1000));
+          setRemaining(rem);
+          if (rem === 0) doCompleteRef.current();
+        }
+      } else if (state === 'background') {
+        if (phase === 'running') {
+          const rem = Math.max(0, Math.round((endTimeRef.current - Date.now()) / 1000));
+          scheduleActiveSessionTimer(rem).catch(() => {});
+        }
       }
     });
-    return () => sub.remove();
+    return () => {
+      sub.remove();
+      cancelActiveSessionNotifications().catch(() => {});
+      cancelUnfinishedSessionReminder().catch(() => {});
+    };
   }, [phase]);
 
   const confirmAbandon = () => {

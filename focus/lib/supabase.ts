@@ -65,7 +65,7 @@ export const supabase = {
         notifyAuthStateChange('SIGNED_IN', { access_token: session.access_token, user });
         return { data: { session: { access_token: session.access_token, user }, user }, error: null };
       } catch (error) {
-        return { data: { session: null, user: null }, error: { message: error.message || 'Network request failed' } };
+        return { data: { session: null, user: null }, error: { message: (error as any).message || 'Network request failed' } };
       }
     },
 
@@ -92,7 +92,7 @@ export const supabase = {
         notifyAuthStateChange('SIGNED_IN', { access_token: session.access_token, user });
         return { data: { session: { access_token: session.access_token, user }, user }, error: null };
       } catch (error) {
-        return { data: { session: null, user: null }, error: { message: error.message || 'Network request failed' } };
+        return { data: { session: null, user: null }, error: { message: (error as any).message || 'Network request failed' } };
       }
     },
 
@@ -137,7 +137,7 @@ export const supabase = {
       on(event: string, opts: any, callback: any) {
         return this;
       },
-      subscribe(statusCb: any) {
+      subscribe(statusCb?: any) {
         if (statusCb) statusCb('SUBSCRIBED');
         return this;
       },

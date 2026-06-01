@@ -22,6 +22,12 @@ import {
 } from '../../lib/db';
 import { supabase } from '../../lib/supabase';
 import { colors, spacing, typography, radius } from '../../utils/theme';
+import {
+  scheduleActiveSessionTimer,
+  cancelActiveSessionNotifications,
+  scheduleUnfinishedSessionReminder,
+  cancelUnfinishedSessionReminder,
+} from '../../lib/notifications';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { TimerDisplay } from '../../components/ui/TimerDisplay';
@@ -67,6 +73,7 @@ export default function CoopRoomScreen() {
 
   const isCreator = room?.created_by === user?.id;
   const myMember = members.find((m) => m.user_id === user?.id);
+  const myStatus = myMember?.status ?? 'joined';
   const allCompleted = members.length > 0 && members.every((m) => m.status === 'completed');
 
   const loadRoom = useCallback(async () => {
@@ -96,7 +103,7 @@ export default function CoopRoomScreen() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'coop_rooms', filter: `id=eq.${roomId}` },
-        (payload) => {
+        (payload: any) => {
           const updated = payload.new as CoopRoom;
           setRoom(updated);
           if (updated.status === 'active' && updated.started_at) {
@@ -141,17 +148,30 @@ export default function CoopRoomScreen() {
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [room?.status]);
 
-  // App foreground: resync timer
+  // App foreground: resync timer and schedule background notification
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active' && room?.status === 'active') {
-        const rem = Math.max(0, Math.round((endTimeRef.current - Date.now()) / 1000));
-        setRemaining(rem);
-        if (rem === 0) handleTimerEnd();
+      if (state === 'active') {
+        cancelActiveSessionNotifications().catch(() => {});
+        cancelUnfinishedSessionReminder().catch(() => {});
+        if (room?.status === 'active') {
+          const rem = Math.max(0, Math.round((endTimeRef.current - Date.now()) / 1000));
+          setRemaining(rem);
+          if (rem === 0) handleTimerEnd();
+        }
+      } else if (state === 'background') {
+        if (room?.status === 'active' && myStatus === 'active') {
+          const rem = Math.max(0, Math.round((endTimeRef.current - Date.now()) / 1000));
+          scheduleActiveSessionTimer(rem).catch(() => {});
+        }
       }
     });
-    return () => sub.remove();
-  }, [room?.status]);
+    return () => {
+      sub.remove();
+      cancelActiveSessionNotifications().catch(() => {});
+      cancelUnfinishedSessionReminder().catch(() => {});
+    };
+  }, [room?.status, myStatus]);
 
   const handleTimerEnd = useCallback(async () => {
     if (completingRef.current || !user?.id || !roomId) return;
@@ -256,7 +276,6 @@ export default function CoopRoomScreen() {
 
   const isActive = room.status === 'active';
   const isWaiting = room.status === 'waiting';
-  const myStatus = myMember?.status ?? 'joined';
   const elapsedPct = room.duration_seconds > 0
     ? Math.round((1 - remaining / room.duration_seconds) * 100)
     : 0;

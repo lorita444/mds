@@ -13,6 +13,12 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/auth-context';
 import { createStudySession, completeSession, abandonSession, getSubjects } from '../lib/db';
+import {
+  scheduleActiveSessionTimer,
+  cancelActiveSessionNotifications,
+  scheduleUnfinishedSessionReminder,
+  cancelUnfinishedSessionReminder,
+} from '../lib/notifications';
 import { toast } from '../store/useAppStore';
 import { colors, spacing, typography, radius } from '../utils/theme';
 import { Button } from '../components/ui/Button';
@@ -79,6 +85,10 @@ export default function CasualFocusScreen() {
     if (!sessionIdRef.current || completingRef.current) return;
     completingRef.current = true;
     if (intervalRef.current) clearInterval(intervalRef.current);
+
+    cancelActiveSessionNotifications().catch(() => {});
+    cancelUnfinishedSessionReminder().catch(() => {});
+
     setCompleting(true);
     setPhase('completing');
     const elapsed = Math.round(
@@ -124,10 +134,22 @@ export default function CasualFocusScreen() {
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active' && phase === 'running') {
-        const rem = Math.max(0, Math.round((endTimeRef.current - Date.now()) / 1000));
-        setRemaining(rem);
-        if (rem === 0) doCompleteRef.current();
+      if (state === 'active') {
+        cancelActiveSessionNotifications().catch(() => {});
+        cancelUnfinishedSessionReminder().catch(() => {});
+
+        if (phase === 'running') {
+          const rem = Math.max(0, Math.round((endTimeRef.current - Date.now()) / 1000));
+          setRemaining(rem);
+          if (rem === 0) doCompleteRef.current();
+        }
+      } else if (state === 'background') {
+        if (phase === 'running') {
+          const rem = Math.max(0, Math.round((endTimeRef.current - Date.now()) / 1000));
+          scheduleActiveSessionTimer(rem).catch(() => {});
+        } else if (phase === 'paused') {
+          scheduleUnfinishedSessionReminder().catch(() => {});
+        }
       }
     });
     return () => sub.remove();
@@ -183,6 +205,10 @@ export default function CasualFocusScreen() {
           onPress: async () => {
             if (!sessionIdRef.current) return;
             if (intervalRef.current) clearInterval(intervalRef.current);
+            
+            cancelActiveSessionNotifications().catch(() => {});
+            cancelUnfinishedSessionReminder().catch(() => {});
+
             const elapsed = Math.round(
               (Date.now() - sessionStartRef.current - totalPausedMsRef.current) / 1000,
             );
