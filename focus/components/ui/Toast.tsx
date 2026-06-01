@@ -5,9 +5,9 @@ import { useAppStore, type Toast as ToastType } from '../../store/useAppStore';
 import { colors, radius, spacing, typography } from '../../utils/theme';
 
 const TYPE_STYLES: Record<ToastType['type'], { bg: string; border: string; icon: string }> = {
-  success: { bg: 'rgba(16,185,129,0.15)', border: 'rgba(16,185,129,0.4)', icon: '✓' },
-  error: { bg: colors.status.errorFaint, border: 'rgba(239,68,68,0.4)', icon: '✕' },
-  info: { bg: colors.cosmic.purpleFaint, border: colors.cosmic.purpleGlow, icon: 'ℹ' },
+  success: { bg: 'rgba(16,185,129,0.92)', border: 'rgba(16,185,129,0.6)', icon: '✓' },
+  error: { bg: 'rgba(239,68,68,0.92)', border: 'rgba(239,68,68,0.6)', icon: '✕' },
+  info: { bg: 'rgba(124,58,237,0.92)', border: 'rgba(124,58,237,0.6)', icon: 'ℹ' },
 };
 
 function ToastItem({ toast }: { toast: ToastType }) {
@@ -44,17 +44,23 @@ function ToastItem({ toast }: { toast: ToastType }) {
           borderRadius: radius.lg,
           paddingHorizontal: spacing.md,
           paddingVertical: spacing.sm + 2,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.3,
+          shadowRadius: 8,
+          elevation: 20,
         }}
       >
-        <Text style={{ color: colors.text.secondary, fontSize: typography.sizes.sm }}>
+        <Text style={{ color: '#fff', fontSize: typography.sizes.sm, fontWeight: '700' }}>
           {style.icon}
         </Text>
         <Text
           style={{
             flex: 1,
-            color: colors.text.primary,
+            color: '#fff',
             fontSize: typography.sizes.sm,
             lineHeight: 18,
+            fontWeight: '600',
           }}
           numberOfLines={3}
         >

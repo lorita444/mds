@@ -147,11 +147,11 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <AuthProvider>
         <ErrorBoundary>
-          <View style={{ flex: 1 }}>
+          <View style={{ flex: 1, position: 'relative' }}>
             <StatusBar style="light" />
             <RootNavigation assetsReady={assetsReady} />
-            <ToastContainer />
           </View>
+          <ToastContainer />
         </ErrorBoundary>
       </AuthProvider>
     </SafeAreaProvider>
