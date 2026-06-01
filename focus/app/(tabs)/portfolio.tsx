@@ -141,11 +141,16 @@ export default function PortfolioScreen() {
       }
     >
       {/* Header */}
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Text style={{ color: colors.text.primary, fontSize: typography.sizes.xl, fontWeight: typography.weights.heavy }}>
-          Portfolio
-        </Text>
-        <Button label="+ Subject" size="sm" variant="ghost" onPress={() => setShowCreate(true)} />
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.md }}>
+        <View style={{ flex: 1 }}>
+          <Text style={{ color: colors.text.primary, fontSize: typography.sizes.xl, fontWeight: typography.weights.heavy }}>
+            Portfolio
+          </Text>
+          <Text style={{ color: colors.text.muted, fontSize: typography.sizes.xs, marginTop: 2 }}>
+            {subjects.length} subject{subjects.length === 1 ? '' : 's'} in your study library
+          </Text>
+        </View>
+        <Button label="New Subject" size="sm" variant="primary" onPress={() => setShowCreate(true)} />
       </View>
 
       {loading ? (
@@ -186,22 +191,29 @@ export default function PortfolioScreen() {
               onPress={() => router.push(`/subject/${s.id}` as never)}
               onLongPress={() => handleDelete(s)}
               style={({ pressed }) => ({
-                backgroundColor: colors.bg.card,
+                backgroundColor: pressed ? colors.bg.elevated : colors.bg.card,
                 borderWidth: 1,
-                borderColor: colors.bg.cardBorder,
-                borderRadius: radius.lg,
+                borderLeftWidth: 4,
+                borderColor: pressed ? `${s.color}88` : colors.bg.cardBorder,
+                borderLeftColor: s.color,
+                borderRadius: radius.md,
                 padding: spacing.md,
                 flexDirection: 'row',
                 alignItems: 'center',
                 gap: spacing.md,
-                opacity: pressed ? 0.82 : 1,
+                shadowColor: '#000000',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.18,
+                shadowRadius: 10,
+                elevation: 3,
+                transform: [{ translateY: pressed ? 1 : 0 }],
               })}
             >
               <View
                 style={{
-                  width: 52,
-                  height: 52,
-                  borderRadius: radius.md,
+                  width: 56,
+                  height: 56,
+                  borderRadius: radius.sm,
                   backgroundColor: `${s.color}22`,
                   borderWidth: 1.5,
                   borderColor: `${s.color}55`,
@@ -217,20 +229,44 @@ export default function PortfolioScreen() {
                   </Text>
                 )}
               </View>
-              <View style={{ flex: 1, gap: 3 }}>
-                <Text style={{ color: colors.text.primary, fontSize: typography.sizes.md, fontWeight: typography.weights.semibold }}>
-                  {s.name}
-                </Text>
-                {s.description && (
-                  <Text style={{ color: colors.text.secondary, fontSize: typography.sizes.sm }} numberOfLines={1}>
-                    {s.description}
+              <View style={{ flex: 1, gap: 5 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+                  <Text style={{ color: colors.text.primary, fontSize: typography.sizes.md, fontWeight: typography.weights.bold, flex: 1 }} numberOfLines={1}>
+                    {s.name}
                   </Text>
-                )}
-                <Text style={{ color: colors.text.muted, fontSize: typography.sizes.xs }}>
-                  Hold to delete · Tap to open
+                  <View style={{ backgroundColor: `${s.color}22`, borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 3 }}>
+                    <Text style={{ color: s.color, fontSize: typography.sizes.xs, fontWeight: typography.weights.semibold }}>
+                      Subject
+                    </Text>
+                  </View>
+                </View>
+                <Text style={{ color: s.description ? colors.text.secondary : colors.text.muted, fontSize: typography.sizes.sm }} numberOfLines={1}>
+                  {s.description || 'No description yet'}
                 </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+                  <Text style={{ color: colors.text.muted, fontSize: typography.sizes.xs }}>
+                    Tap to open
+                  </Text>
+                  <View style={{ width: 3, height: 3, borderRadius: radius.full, backgroundColor: colors.text.dim }} />
+                  <Text style={{ color: colors.text.muted, fontSize: typography.sizes.xs }}>
+                    Hold to delete
+                  </Text>
+                </View>
               </View>
-              <Text style={{ color: colors.text.muted, fontSize: 20 }}>›</Text>
+              <View
+                style={{
+                  width: 30,
+                  height: 30,
+                  borderRadius: radius.full,
+                  backgroundColor: colors.bg.elevated,
+                  borderWidth: 1,
+                  borderColor: colors.bg.cardBorder,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Text style={{ color: colors.text.secondary, fontSize: 20, lineHeight: 22 }}>›</Text>
+              </View>
             </Pressable>
           ))}
         </View>

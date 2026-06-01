@@ -8,7 +8,6 @@ import {
   AppState,
   StyleSheet,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/auth-context';
@@ -32,10 +31,10 @@ const DURATIONS = [
 ];
 
 const REWARD_TIERS = [
-  { minSeconds: 0,    label: 'Crystals',         icon: 'diamond-outline' as const, color: colors.crystal.primary },
-  { minSeconds: 1800, label: 'More crystals',    icon: 'diamond' as const,         color: colors.crystal.light },
-  { minSeconds: 3600, label: '+ Alien chance',   icon: 'planet-outline' as const,  color: colors.cosmic.purpleLight },
-  { minSeconds: 7200, label: 'Universe element', icon: 'star' as const,            color: colors.cosmic.goldLight },
+  { minSeconds: 0,    label: 'Crystals',         icon: '💎', color: colors.crystal.primary },
+  { minSeconds: 1800, label: 'More crystals',    icon: '🔷', color: colors.crystal.light },
+  { minSeconds: 3600, label: '+ Alien chance',   icon: '👾', color: colors.cosmic.purpleLight },
+  { minSeconds: 7200, label: 'Universe element', icon: '✨', color: colors.cosmic.goldLight },
 ];
 
 type Phase = 'idle' | 'running' | 'paused' | 'completing';
@@ -237,7 +236,7 @@ export default function CasualFocusScreen() {
       >
         <View style={styles.rowHeader}>
           <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backBtn}>
-            <Ionicons name="chevron-back" size={22} color={colors.text.secondary} />
+            <Text style={styles.backIcon}>‹</Text>
           </Pressable>
           <View>
             <Text style={styles.screenTitle}>Casual Focus</Text>
@@ -301,7 +300,7 @@ export default function CasualFocusScreen() {
           <View style={{ gap: spacing.xs + 2, marginTop: spacing.sm }}>
             {REWARD_TIERS.map((tier) => (
               <View key={tier.label} style={styles.rewardRow}>
-                <Ionicons name={tier.icon} size={14} color={tier.color} />
+                <Text style={[styles.rewardIcon, { color: tier.color }]}>{tier.icon}</Text>
                 <Text style={[styles.rewardLabel, { color: tier.color }]}>{tier.label}</Text>
                 <Text style={styles.rewardTime}>
                   {tier.minSeconds === 0
@@ -359,7 +358,9 @@ export default function CasualFocusScreen() {
           )}
         </View>
         <View style={[styles.tierBadge, { borderColor: REWARD_TIERS[currentTierIndex].color + '55' }]}>
-          <Ionicons name={REWARD_TIERS[currentTierIndex].icon} size={12} color={REWARD_TIERS[currentTierIndex].color} />
+          <Text style={[styles.tierIcon, { color: REWARD_TIERS[currentTierIndex].color }]}>
+            {REWARD_TIERS[currentTierIndex].icon}
+          </Text>
           <Text style={[styles.tierText, { color: REWARD_TIERS[currentTierIndex].color }]}>
             {REWARD_TIERS[currentTierIndex].label}
           </Text>
@@ -407,7 +408,7 @@ export default function CasualFocusScreen() {
 
         {!completing && (
           <Pressable onPress={confirmAbandon} style={styles.abandonRow}>
-            <Ionicons name="close-circle-outline" size={14} color={colors.text.muted} />
+            <Text style={styles.abandonIcon}>×</Text>
             <Text style={styles.abandonText}>Abandon session</Text>
           </Pressable>
         )}
@@ -426,6 +427,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: colors.bg.cardBorder,
     alignItems: 'center', justifyContent: 'center',
   },
+  backIcon: { color: colors.text.secondary, fontSize: 24, lineHeight: 26 },
   screenTitle: { color: colors.text.primary, fontSize: typography.sizes.xl, fontWeight: typography.weights.heavy },
   screenSubtitle: { color: colors.text.muted, fontSize: typography.sizes.sm, marginTop: 2 },
   sectionLabel: {
@@ -460,6 +462,7 @@ const styles = StyleSheet.create({
   subjectChipText: { color: colors.text.primary, fontSize: typography.sizes.sm },
   cardTitle: { color: colors.text.primary, fontSize: typography.sizes.sm, fontWeight: typography.weights.semibold },
   rewardRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  rewardIcon: { width: 18, fontSize: 14, textAlign: 'center' },
   rewardLabel: { flex: 1, fontSize: typography.sizes.xs, fontWeight: typography.weights.medium },
   rewardTime: { color: colors.text.muted, fontSize: typography.sizes.xs },
   subjectPill: {
@@ -473,11 +476,13 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderRadius: radius.full,
     paddingHorizontal: spacing.sm, paddingVertical: 4,
   },
+  tierIcon: { fontSize: 12, lineHeight: 15 },
   tierText: { fontSize: typography.sizes.xs, fontWeight: typography.weights.semibold },
   motivationText: { color: colors.text.secondary, fontSize: typography.sizes.sm, textAlign: 'center' },
   abandonRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 5, paddingVertical: spacing.sm,
   },
+  abandonIcon: { color: colors.text.muted, fontSize: 15, lineHeight: 16 },
   abandonText: { color: colors.text.muted, fontSize: typography.sizes.sm },
 });

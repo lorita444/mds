@@ -16,7 +16,6 @@ import type {
   CoopRoom,
   CoopRoomMember,
   Streak,
-  Wager,
   Quiz,
   QuizQuestion,
 } from './types';
@@ -120,20 +119,22 @@ export async function deleteChapter(id: string): Promise<void> {
 // ── MATERIALS ────────────────────────────────────────────────
 
 export async function getMaterials(subjectId: string): Promise<Material[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('materials')
     .select('*')
     .eq('subject_id', subjectId)
     .order('created_at', { ascending: true });
+  if (error) throw error;
   return data ?? [];
 }
 
 export async function getMaterialsByChapter(chapterId: string): Promise<Material[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('materials')
     .select('*')
     .eq('chapter_id', chapterId)
     .order('created_at', { ascending: true });
+  if (error) throw error;
   return data ?? [];
 }
 
@@ -146,20 +147,24 @@ export async function createMaterial(payload: {
   file_type: string;
   size_bytes: number;
 }): Promise<Material | null> {
-  const { data } = await supabase.from('materials').insert(payload).select().single();
+  const { data, error } = await supabase.from('materials').insert(payload).select().single();
+  if (error) throw error;
   return data;
 }
 
 export async function updateMaterialSummary(id: string, summary: string): Promise<void> {
-  await supabase.from('materials').update({ summary, is_summarized: true }).eq('id', id);
+  const { error } = await supabase.from('materials').update({ summary, is_summarized: true }).eq('id', id);
+  if (error) throw error;
 }
 
 export async function markMaterialEmbedded(id: string): Promise<void> {
-  await supabase.from('materials').update({ embedding_done: true }).eq('id', id);
+  const { error } = await supabase.from('materials').update({ embedding_done: true }).eq('id', id);
+  if (error) throw error;
 }
 
 export async function deleteMaterial(id: string): Promise<void> {
-  await supabase.from('materials').delete().eq('id', id);
+  const { error } = await supabase.from('materials').delete().eq('id', id);
+  if (error) throw error;
 }
 
 // ── STORAGE (materials bucket) ───────────────────────────────
@@ -171,7 +176,12 @@ export async function uploadMaterial(
   fileBlob: Blob,
   mimeType: string,
 ): Promise<string> {
-  const path = `${userId}/${subjectId}/${Date.now()}_${fileName}`;
+  const safeFileName = fileName
+    .normalize('NFKD')
+    .replace(/[^\w.\-]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 120) || 'material';
+  const path = `${userId}/${subjectId}/${Date.now()}_${safeFileName}`;
   const { error } = await supabase.storage
     .from('materials')
     .upload(path, fileBlob, { contentType: mimeType, upsert: false });
@@ -181,8 +191,26 @@ export async function uploadMaterial(
 }
 
 export async function deleteMaterialFile(fileUrl: string): Promise<void> {
-  const path = fileUrl.split('/materials/')[1];
-  if (path) await supabase.storage.from('materials').remove([path]);
+  const path = getMaterialStoragePath(fileUrl);
+  if (!path) return;
+  const { error } = await supabase.storage.from('materials').remove([path]);
+  if (error) throw error;
+}
+
+function getMaterialStoragePath(fileUrl: string): string | null {
+  if (!fileUrl) return null;
+  if (!fileUrl.startsWith('http')) return fileUrl.replace(/^\/+/, '');
+
+  try {
+    const url = new URL(fileUrl);
+    const marker = '/materials/';
+    const markerIndex = url.pathname.indexOf(marker);
+    if (markerIndex === -1) return null;
+    return decodeURIComponent(url.pathname.slice(markerIndex + marker.length));
+  } catch {
+    const [, path] = fileUrl.split('/materials/');
+    return path ? decodeURIComponent(path) : null;
+  }
 }
 
 // ── STUDY SESSIONS ───────────────────────────────────────────

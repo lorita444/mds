@@ -1,4 +1,4 @@
-import { Pressable, Text, ActivityIndicator, View, type PressableProps } from 'react-native';
+import { Pressable, Text, ActivityIndicator, type PressableProps } from 'react-native';
 import { colors, radius, typography, spacing } from '../../utils/theme';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'crystal';
@@ -16,6 +16,7 @@ type VariantStyle = {
   bg: string;
   border: string;
   text: string;
+  borderWidth?: number;
   shadow?: ShadowStyle;
 };
 
@@ -31,30 +32,39 @@ type ButtonProps = PressableProps & {
 const variantStyles: Record<Variant, VariantStyle> = {
   primary: {
     bg: colors.cosmic.purple,
-    border: 'rgba(167,139,250,0.6)',
+    border: 'rgba(196,181,253,0.72)',
     text: colors.text.primary,
+    borderWidth: 1.5,
     shadow: {
       shadowColor: colors.cosmic.purple,
-      shadowOffset: { width: 0, height: 5 },
-      shadowOpacity: 0.55,
-      shadowRadius: 18,
-      elevation: 12,
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.42,
+      shadowRadius: 14,
+      elevation: 8,
     },
   },
   secondary: {
     bg: colors.bg.elevated,
-    border: 'rgba(139,92,246,0.35)',
+    border: 'rgba(148,163,184,0.28)',
     text: colors.text.primary,
+    shadow: {
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.22,
+      shadowRadius: 8,
+      elevation: 4,
+    },
   },
   ghost: {
-    bg: 'transparent',
-    border: 'rgba(139,92,246,0.45)',
+    bg: 'rgba(124,58,237,0.10)',
+    border: 'rgba(167,139,250,0.34)',
     text: colors.text.accent,
   },
   danger: {
     bg: colors.status.error,
     border: 'rgba(239,68,68,0.5)',
     text: colors.text.primary,
+    borderWidth: 1.5,
     shadow: {
       shadowColor: colors.status.error,
       shadowOffset: { width: 0, height: 4 },
@@ -77,10 +87,10 @@ const variantStyles: Record<Variant, VariantStyle> = {
   },
 };
 
-const sizeStyles: Record<Size, { py: number; px: number; fontSize: number; borderRadius: number }> = {
-  sm: { py: 10, px: 18, fontSize: typography.sizes.sm, borderRadius: radius.md },
-  md: { py: 15, px: 26, fontSize: typography.sizes.base, borderRadius: radius.lg },
-  lg: { py: 20, px: 36, fontSize: typography.sizes.md, borderRadius: radius.xl },
+const sizeStyles: Record<Size, { py: number; px: number; minHeight: number; fontSize: number; borderRadius: number }> = {
+  sm: { py: 9, px: 16, minHeight: 38, fontSize: typography.sizes.sm, borderRadius: radius.sm },
+  md: { py: 13, px: 22, minHeight: 48, fontSize: typography.sizes.base, borderRadius: radius.md },
+  lg: { py: 16, px: 28, minHeight: 56, fontSize: typography.sizes.md, borderRadius: radius.lg },
 };
 
 export function Button({
@@ -101,21 +111,24 @@ export function Button({
   return (
     <Pressable
       disabled={isDisabled}
+      accessibilityRole="button"
       style={({ pressed }) => [
         {
           backgroundColor: v.bg,
-          borderWidth: 1,
+          borderWidth: v.borderWidth ?? 1,
           borderColor: v.border,
           borderRadius: s.borderRadius,
           paddingVertical: s.py,
           paddingHorizontal: s.px,
+          minHeight: s.minHeight,
+          minWidth: size === 'sm' ? 92 : 120,
           alignItems: 'center' as const,
           justifyContent: 'center' as const,
           flexDirection: 'row' as const,
           gap: spacing.sm,
           alignSelf: fullWidth ? ('stretch' as const) : ('auto' as const),
           opacity: isDisabled ? 0.45 : 1,
-          transform: [{ scale: pressed && !isDisabled ? 0.97 : 1 }],
+          transform: [{ translateY: pressed && !isDisabled ? 1 : 0 }],
           // Glow shadow (only when not disabled, not pressed)
           ...(v.shadow && !isDisabled && !pressed ? v.shadow : {}),
         },
@@ -129,7 +142,7 @@ export function Button({
           color: v.text,
           fontSize: s.fontSize,
           fontWeight: typography.weights.semibold,
-          letterSpacing: typography.tracking.wide,
+          letterSpacing: typography.tracking.normal,
         }}
       >
         {loading && loadingLabel ? loadingLabel : label}

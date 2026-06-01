@@ -34,10 +34,36 @@ import { ErrorState } from '../../components/ui/ErrorState';
 import { SkeletonBox, SkeletonCard } from '../../components/ui/Skeleton';
 import type { Subject, Chapter, Material } from '../../lib/types';
 
+const MAX_MATERIAL_BYTES = 25 * 1024 * 1024;
+const SUPPORTED_MATERIAL_TYPES = [
+  'application/pdf',
+  'text/plain',
+  'text/markdown',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+];
+
 function formatBytes(b: number): string {
   if (b < 1024) return `${b} B`;
   if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
   return `${(b / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function isSupportedMaterial(fileName: string, mimeType?: string | null): boolean {
+  const lowerName = fileName.toLowerCase();
+  if (mimeType && SUPPORTED_MATERIAL_TYPES.includes(mimeType)) return true;
+  return ['.pdf', '.txt', '.md', '.doc', '.docx'].some((ext) => lowerName.endsWith(ext));
+}
+
+function inferMaterialType(fileName: string, mimeType?: string | null): string {
+  if (mimeType) return mimeType;
+  const lowerName = fileName.toLowerCase();
+  if (lowerName.endsWith('.pdf')) return 'application/pdf';
+  if (lowerName.endsWith('.md')) return 'text/markdown';
+  if (lowerName.endsWith('.txt')) return 'text/plain';
+  if (lowerName.endsWith('.doc')) return 'application/msword';
+  if (lowerName.endsWith('.docx')) return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  return 'application/octet-stream';
 }
 
 function SubjectSkeleton() {
@@ -84,7 +110,7 @@ export default function SubjectDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [uploadingTarget, setUploadingTarget] = useState<string | null>(null);
 
   // Chapter modal
   const [showAddChapter, setShowAddChapter] = useState(false);
@@ -159,6 +185,11 @@ export default function SubjectDetailScreen() {
 
   const handleUploadMaterial = async (chapterId: string | null) => {
     if (!user?.id || !id) return;
+    if (uploadingTarget) return;
+
+    const targetKey = chapterId ?? 'unassigned';
+    let uploadedUrl: string | null = null;
+
     try {
       const result = await DocumentPicker.getDocumentAsync({
         type: [
@@ -172,17 +203,31 @@ export default function SubjectDetailScreen() {
       if (result.canceled || !result.assets?.[0]) return;
 
       const file = result.assets[0];
-      setUploading(true);
+      const fileSize = file.size ?? 0;
+      const fileType = inferMaterialType(file.name, file.mimeType);
+
+      if (!isSupportedMaterial(file.name, file.mimeType)) {
+        Alert.alert('Unsupported file', 'Upload a PDF, TXT, Markdown, DOC, or DOCX file.');
+        return;
+      }
+
+      if (fileSize > MAX_MATERIAL_BYTES) {
+        Alert.alert('File too large', `Maximum upload size is ${formatBytes(MAX_MATERIAL_BYTES)}.`);
+        return;
+      }
+
+      setUploadingTarget(targetKey);
 
       const response = await fetch(file.uri);
+      if (!response.ok) throw new Error('Could not read the selected file.');
       const blob = await response.blob();
 
-      const url = await uploadMaterial(
+      uploadedUrl = await uploadMaterial(
         user.id,
         id,
         file.name,
         blob,
-        file.mimeType ?? 'application/octet-stream',
+        fileType,
       );
 
       const material = await createMaterial({
@@ -190,9 +235,9 @@ export default function SubjectDetailScreen() {
         chapter_id: chapterId,
         user_id: user.id,
         name: file.name,
-        file_url: url,
-        file_type: file.mimeType ?? 'unknown',
-        size_bytes: file.size ?? blob.size,
+        file_url: uploadedUrl,
+        file_type: fileType,
+        size_bytes: fileSize || blob.size,
       });
 
       if (material) {
@@ -200,9 +245,12 @@ export default function SubjectDetailScreen() {
         toast(`"${file.name}" uploaded`, 'success');
       }
     } catch (e) {
+      if (uploadedUrl) {
+        try { await deleteMaterialFile(uploadedUrl); } catch {}
+      }
       toast(e instanceof Error ? e.message : 'Upload failed', 'error');
     } finally {
-      setUploading(false);
+      setUploadingTarget(null);
     }
   };
 
@@ -287,45 +335,79 @@ export default function SubjectDetailScreen() {
             </View>
           </View>
 
-          {/* AI action buttons */}
+          {/* Primary actions */}
           <View style={{ flexDirection: 'row', gap: spacing.sm }}>
             <Pressable
               onPress={() => router.push(`/ai-chat/${subject!.id}` as never)}
               style={({ pressed }) => ({
                 flex: 1,
-                backgroundColor: colors.cosmic.purpleFaint,
+                minHeight: 104,
+                backgroundColor: pressed ? 'rgba(124,58,237,0.18)' : colors.bg.card,
                 borderWidth: 1,
                 borderColor: colors.cosmic.purpleGlow,
-                borderRadius: radius.lg,
+                borderRadius: radius.md,
                 padding: spacing.md,
-                alignItems: 'center',
-                gap: 6,
-                opacity: pressed ? 0.8 : 1,
+                justifyContent: 'space-between',
+                gap: spacing.sm,
+                transform: [{ translateY: pressed ? 1 : 0 }],
               })}
             >
-              <Image source={AI_AVATAR} style={{ width: 26, height: 26 }} resizeMode="contain" />
-              <Text style={{ color: colors.cosmic.purpleLight, fontSize: typography.sizes.xs, fontWeight: typography.weights.semibold, textAlign: 'center' }}>
-                AI Chat
-              </Text>
+              <View
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: radius.sm,
+                  backgroundColor: colors.cosmic.purpleFaint,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Image source={AI_AVATAR} style={{ width: 24, height: 24 }} resizeMode="contain" />
+              </View>
+              <View style={{ gap: 3 }}>
+                <Text style={{ color: colors.text.primary, fontSize: typography.sizes.sm, fontWeight: typography.weights.bold }}>
+                  AI Chat
+                </Text>
+                <Text style={{ color: colors.text.muted, fontSize: typography.sizes.xs, lineHeight: 15 }}>
+                  Ask from notes
+                </Text>
+              </View>
             </Pressable>
             <Pressable
               onPress={() => router.push(`/flashcards/${subject!.id}` as never)}
               style={({ pressed }) => ({
                 flex: 1,
-                backgroundColor: colors.cosmic.tealFaint,
+                minHeight: 104,
+                backgroundColor: pressed ? 'rgba(13,148,136,0.18)' : colors.bg.card,
                 borderWidth: 1,
                 borderColor: colors.cosmic.teal,
-                borderRadius: radius.lg,
+                borderRadius: radius.md,
                 padding: spacing.md,
-                alignItems: 'center',
-                gap: 6,
-                opacity: pressed ? 0.8 : 1,
+                justifyContent: 'space-between',
+                gap: spacing.sm,
+                transform: [{ translateY: pressed ? 1 : 0 }],
               })}
             >
-              <Text style={{ fontSize: 22 }}>🃏</Text>
-              <Text style={{ color: colors.cosmic.tealLight, fontSize: typography.sizes.xs, fontWeight: typography.weights.semibold, textAlign: 'center' }}>
-                Flashcards
-              </Text>
+              <View
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: radius.sm,
+                  backgroundColor: colors.cosmic.tealFaint,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Text style={{ fontSize: 21 }}>🃏</Text>
+              </View>
+              <View style={{ gap: 3 }}>
+                <Text style={{ color: colors.text.primary, fontSize: typography.sizes.sm, fontWeight: typography.weights.bold }}>
+                  Flashcards
+                </Text>
+                <Text style={{ color: colors.text.muted, fontSize: typography.sizes.xs, lineHeight: 15 }}>
+                  Review terms
+                </Text>
+              </View>
             </Pressable>
             <Pressable
               onPress={() =>
@@ -336,20 +418,37 @@ export default function SubjectDetailScreen() {
               }
               style={({ pressed }) => ({
                 flex: 1,
-                backgroundColor: 'rgba(219,39,119,0.1)',
+                minHeight: 104,
+                backgroundColor: pressed ? 'rgba(219,39,119,0.18)' : colors.bg.card,
                 borderWidth: 1,
                 borderColor: 'rgba(219,39,119,0.3)',
-                borderRadius: radius.lg,
+                borderRadius: radius.md,
                 padding: spacing.md,
-                alignItems: 'center',
-                gap: 6,
-                opacity: pressed ? 0.8 : 1,
+                justifyContent: 'space-between',
+                gap: spacing.sm,
+                transform: [{ translateY: pressed ? 1 : 0 }],
               })}
             >
-              <Text style={{ fontSize: 22 }}>🎯</Text>
-              <Text style={{ color: colors.cosmic.pinkLight, fontSize: typography.sizes.xs, fontWeight: typography.weights.semibold, textAlign: 'center' }}>
-                Mission
-              </Text>
+              <View
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: radius.sm,
+                  backgroundColor: 'rgba(219,39,119,0.12)',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Text style={{ fontSize: 21 }}>🎯</Text>
+              </View>
+              <View style={{ gap: 3 }}>
+                <Text style={{ color: colors.text.primary, fontSize: typography.sizes.sm, fontWeight: typography.weights.bold }}>
+                  Mission
+                </Text>
+                <Text style={{ color: colors.text.muted, fontSize: typography.sizes.xs, lineHeight: 15 }}>
+                  Focus timer
+                </Text>
+              </View>
             </Pressable>
           </View>
 
@@ -367,11 +466,12 @@ export default function SubjectDetailScreen() {
               >
                 Chapters ({chapters.length})
               </Text>
-              <Button label="+ Chapter" size="sm" variant="ghost" onPress={() => setShowAddChapter(true)} />
+              <Button label="New Chapter" size="sm" variant="secondary" onPress={() => setShowAddChapter(true)} />
             </View>
 
             {chapters.map((chapter) => {
               const chapterMaterials = materials.filter((m) => m.chapter_id === chapter.id);
+              const chapterUploading = uploadingTarget === chapter.id;
               return (
                 <Card key={chapter.id} variant="default" padding={spacing.md}>
                   <View style={{ gap: spacing.sm }}>
@@ -385,16 +485,19 @@ export default function SubjectDetailScreen() {
                       <View style={{ flexDirection: 'row', gap: spacing.xs }}>
                         <Pressable
                           onPress={() => handleUploadMaterial(chapter.id)}
+                          disabled={!!uploadingTarget}
                           style={({ pressed }) => ({
                             backgroundColor: colors.cosmic.purpleFaint,
+                            borderWidth: 1,
+                            borderColor: colors.cosmic.purpleGlow,
                             borderRadius: radius.sm,
                             paddingHorizontal: 10,
                             paddingVertical: 5,
-                            opacity: pressed ? 0.7 : 1,
+                            opacity: pressed || (uploadingTarget && !chapterUploading) ? 0.55 : 1,
                           })}
                         >
                           <Text style={{ color: colors.cosmic.purpleLight, fontSize: typography.sizes.xs, fontWeight: typography.weights.semibold }}>
-                            {uploading ? '…' : '+ Upload'}
+                            {chapterUploading ? 'Uploading...' : '+ Upload'}
                           </Text>
                         </Pressable>
                         <Pressable onPress={() => handleDeleteChapter(chapter)} style={{ padding: 5 }}>
@@ -442,16 +545,19 @@ export default function SubjectDetailScreen() {
               </Text>
               <Pressable
                 onPress={() => handleUploadMaterial(null)}
+                disabled={!!uploadingTarget}
                 style={({ pressed }) => ({
                   backgroundColor: colors.bg.elevated,
+                  borderWidth: 1,
+                  borderColor: colors.bg.cardBorder,
                   borderRadius: radius.sm,
                   paddingHorizontal: 10,
                   paddingVertical: 5,
-                  opacity: pressed ? 0.7 : 1,
+                  opacity: pressed || (uploadingTarget && uploadingTarget !== 'unassigned') ? 0.55 : 1,
                 })}
               >
                 <Text style={{ color: colors.text.secondary, fontSize: typography.sizes.xs }}>
-                  {uploading ? 'Uploading…' : '+ Upload'}
+                  {uploadingTarget === 'unassigned' ? 'Uploading...' : '+ Upload'}
                 </Text>
               </Pressable>
             </View>

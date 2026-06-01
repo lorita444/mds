@@ -1,7 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { View, Text, ScrollView, Pressable, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/auth-context';
 import {
@@ -180,16 +179,12 @@ export default function UniverseScreen() {
             {/* Stats row */}
             <View style={{ flexDirection: 'row', gap: spacing.sm }}>
               {[
-                { icon: 'flame-outline' as const, iconActive: 'flame' as const, value: streak.toString(), label: 'Day streak', active: streak >= 7 },
-                { icon: 'flash-outline' as const, iconActive: 'flash' as const, value: `${multiplier.toFixed(1)}x`, label: 'Multiplier', active: multiplier >= 1.5 },
-                { icon: 'time-outline' as const, iconActive: 'time' as const, value: formatSeconds(todaySeconds), label: 'Today', active: todaySeconds >= 3600 },
+                { icon: '🔥', value: streak.toString(), label: 'Day streak', active: streak >= 7 },
+                { icon: '⚡', value: `${multiplier.toFixed(1)}x`, label: 'Multiplier', active: multiplier >= 1.5 },
+                { icon: '⏱', value: formatSeconds(todaySeconds), label: 'Today', active: todaySeconds >= 3600 },
               ].map((stat) => (
                 <Card key={stat.label} variant="default" padding={spacing.md} style={{ flex: 1, gap: 6 }}>
-                  <Ionicons
-                    name={stat.active ? stat.iconActive : stat.icon}
-                    size={20}
-                    color={stat.active ? colors.cosmic.goldLight : colors.text.muted}
-                  />
+                  <Text style={{ fontSize: 20, opacity: stat.active ? 1 : 0.5 }}>{stat.icon}</Text>
                   <Text style={{ color: stat.active ? colors.cosmic.goldLight : colors.text.primary, fontSize: typography.sizes.xl, fontWeight: typography.weights.bold }}>
                     {stat.value}
                   </Text>
@@ -226,7 +221,7 @@ export default function UniverseScreen() {
 
                 {multiplier > 1.0 && (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs, backgroundColor: 'rgba(245,158,11,0.12)', borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: 6, borderWidth: 1, borderColor: 'rgba(245,158,11,0.3)' }}>
-                    <Ionicons name="flash" size={13} color={colors.cosmic.goldLight} />
+                    <Text style={{ color: colors.cosmic.goldLight, fontSize: 13 }}>⚡</Text>
                     <Text style={{ color: colors.cosmic.goldLight, fontSize: typography.sizes.xs, fontWeight: typography.weights.bold }}>
                       {multiplier.toFixed(1)}x Boost Active
                     </Text>
