@@ -281,13 +281,17 @@ app.delete('/api/chapters/:id', async (req, res) => {
 // ── MATERIALS ────────────────────────────────────────────────
 
 app.get('/api/materials', async (req, res) => {
-  const { subjectId, chapterId } = req.query;
+  const { subjectId, chapterId, userId } = req.query;
   try {
     let rows;
     if (chapterId) {
       rows = await db.query('SELECT * FROM materials WHERE chapter_id = ? ORDER BY created_at ASC', [chapterId]);
-    } else {
+    } else if (subjectId) {
       rows = await db.query('SELECT * FROM materials WHERE subject_id = ? ORDER BY created_at ASC', [subjectId]);
+    } else if (userId) {
+      rows = await db.query('SELECT * FROM materials WHERE user_id = ? ORDER BY created_at ASC', [userId]);
+    } else {
+      rows = await db.query('SELECT * FROM materials ORDER BY created_at ASC');
     }
     res.json(mapBoolsArray(rows, ['is_summarized', 'embedding_done']));
   } catch (error) {
@@ -966,6 +970,311 @@ app.post('/api/quiz-questions/batch', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+// ── COOPERATIVE ROOMS (CO-OP) ────────────────────────────────
+
+// 1. Create a Co-op Room
+app.post('/api/coop/rooms', authenticateToken, async (req, res) => {
+  const { durationSeconds, joinCode } = req.body;
+  const userId = req.user.id;
+
+  if (!durationSeconds || !joinCode) {
+    return res.status(400).json({ error: 'Duration and join code are required' });
+  }
+
+  try {
+    const roomId = generateUUID();
+    const cleanJoinCode = joinCode.toUpperCase().trim();
+
+    // Check if code exists
+    const codeExists = await db.querySingle('SELECT id FROM coop_rooms WHERE join_code = ? AND status != "completed"', [cleanJoinCode]);
+    if (codeExists) {
+      return res.status(400).json({ error: 'Codul de cameră este deja folosit activ.' });
+    }
+
+    // Insert room
+    await db.query(
+      `INSERT INTO coop_rooms (id, created_by, join_code, duration_seconds, status) VALUES (?, ?, ?, ?, 'waiting')`,
+      [roomId, userId, cleanJoinCode, durationSeconds]
+    );
+
+    // Insert member (creator)
+    const memberId = generateUUID();
+    await db.query(
+      `INSERT INTO coop_room_members (id, room_id, user_id, status) VALUES (?, ?, ?, 'joined')`,
+      [memberId, roomId, userId]
+    );
+
+    res.json({
+      id: roomId,
+      created_by: userId,
+      join_code: cleanJoinCode,
+      duration_seconds: durationSeconds,
+      status: 'waiting',
+      started_at: null,
+      completed_at: null,
+      created_at: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 2. Get Co-op Room details (for polling)
+app.get('/api/coop/rooms/:roomId', authenticateToken, async (req, res) => {
+  const { roomId } = req.params;
+
+  try {
+    const room = await db.querySingle('SELECT * FROM coop_rooms WHERE id = ?', [roomId]);
+    if (!room) {
+      return res.status(404).json({ error: 'Camera nu a fost găsită' });
+    }
+
+    res.json(mapBools(room, []));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 3. Find Room by Code
+app.get('/api/coop/rooms/code/:code', authenticateToken, async (req, res) => {
+  const { code } = req.params;
+  const cleanCode = code.toUpperCase().trim();
+
+  try {
+    const room = await db.querySingle(
+      'SELECT * FROM coop_rooms WHERE join_code = ? AND status != "completed"',
+      [cleanCode]
+    );
+    if (!room) {
+      return res.status(404).json({ error: 'Nu există nicio cameră activă cu acest cod' });
+    }
+    res.json(room);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 4. Join a Room
+app.post('/api/coop/rooms/join', authenticateToken, async (req, res) => {
+  const { joinCode } = req.body;
+  const userId = req.user.id;
+
+  if (!joinCode) {
+    return res.status(400).json({ error: 'Codul de cameră este necesar' });
+  }
+
+  try {
+    const cleanCode = joinCode.toUpperCase().trim();
+    const room = await db.querySingle(
+      'SELECT * FROM coop_rooms WHERE join_code = ? AND status = "waiting"',
+      [cleanCode]
+    );
+
+    if (!room) {
+      return res.status(404).json({ error: 'Cameră inactivă sau plină' });
+    }
+
+    const roomId = room.id;
+
+    // Check if already member
+    const existing = await db.querySingle(
+      'SELECT id FROM coop_room_members WHERE room_id = ? AND user_id = ?',
+      [roomId, userId]
+    );
+
+    if (!existing) {
+      const memberId = generateUUID();
+      await db.query(
+        'INSERT INTO coop_room_members (id, room_id, user_id, status) VALUES (?, ?, ?, "joined")',
+        [memberId, roomId, userId]
+      );
+    }
+
+    res.json(room);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 5. Get Co-op Members
+app.get('/api/coop/rooms/:roomId/members', authenticateToken, async (req, res) => {
+  const { roomId } = req.params;
+
+  try {
+    const members = await db.query(
+      `SELECT m.*, u.username, u.avatar_url 
+       FROM coop_room_members m
+       JOIN users u ON m.user_id = u.id
+       WHERE m.room_id = ?`,
+      [roomId]
+    );
+
+    // Map rows to structure matching client
+    const mapped = members.map(m => ({
+      id: m.id,
+      room_id: m.room_id,
+      user_id: m.user_id,
+      status: m.status,
+      joined_at: m.joined_at,
+      users: {
+        username: m.username,
+        avatar_url: m.avatar_url
+      }
+    }));
+
+    res.json(mapped);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 6. Update Member Status (completed, abandoned, accepted)
+app.post('/api/coop/rooms/:roomId/members/status', authenticateToken, async (req, res) => {
+  const { roomId } = req.params;
+  const { status } = req.body;
+  const userId = req.user.id;
+
+  try {
+    await db.query(
+      'UPDATE coop_room_members SET status = ? WHERE room_id = ? AND user_id = ?',
+      [status, roomId, userId]
+    );
+
+    // If setting to accepted, check if everyone is accepted!
+    if (status === 'accepted') {
+      const members = await db.query('SELECT status FROM coop_room_members WHERE room_id = ?', [roomId]);
+      const allAccepted = members.every(m => m.status === 'accepted');
+
+      if (allAccepted) {
+        // Start the room!
+        const nowStr = new Date().toISOString();
+        await db.query(
+          'UPDATE coop_rooms SET status = "active", started_at = ? WHERE id = ?',
+          [nowStr, roomId]
+        );
+
+        // Transition all member statuses to 'active'
+        await db.query(
+          'UPDATE coop_room_members SET status = "active" WHERE room_id = ?',
+          [roomId]
+        );
+      }
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 7. Request Start (Creator only) - Transitions to 'starting'
+app.post('/api/coop/rooms/:roomId/start', authenticateToken, async (req, res) => {
+  const { roomId } = req.params;
+  const userId = req.user.id;
+
+  try {
+    const room = await db.querySingle('SELECT created_by FROM coop_rooms WHERE id = ?', [roomId]);
+    if (!room || room.created_by !== userId) {
+      return res.status(403).json({ error: 'Doar creatorul camerei poate iniția startul' });
+    }
+
+    // Change room status to starting
+    await db.query('UPDATE coop_rooms SET status = "starting" WHERE id = ?', [roomId]);
+
+    // Mark creator as automatically accepted
+    await db.query(
+      'UPDATE coop_room_members SET status = "accepted" WHERE room_id = ? AND user_id = ?',
+      [roomId, userId]
+    );
+
+    // Check if everyone is accepted (if they are alone in room)
+    const members = await db.query('SELECT status FROM coop_room_members WHERE room_id = ?', [roomId]);
+    const allAccepted = members.every(m => m.status === 'accepted');
+
+    if (allAccepted) {
+      const nowStr = new Date().toISOString();
+      await db.query(
+        'UPDATE coop_rooms SET status = "active", started_at = ? WHERE id = ?',
+        [nowStr, roomId]
+      );
+      await db.query(
+        'UPDATE coop_room_members SET status = "active" WHERE room_id = ?',
+        [roomId]
+      );
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 8. Add Shared Material to Room
+app.post('/api/coop/rooms/:roomId/materials', authenticateToken, async (req, res) => {
+  const { roomId } = req.params;
+  const { materialId } = req.body;
+
+  if (!materialId) {
+    return res.status(400).json({ error: 'Material ID-ul este obligatoriu' });
+  }
+
+  try {
+    // Check duplicate
+    const exists = await db.querySingle(
+      'SELECT id FROM coop_room_materials WHERE room_id = ? AND material_id = ?',
+      [roomId, materialId]
+    );
+
+    if (!exists) {
+      const id = generateUUID();
+      await db.query(
+        'INSERT INTO coop_room_materials (id, room_id, material_id) VALUES (?, ?, ?)',
+        [id, roomId, materialId]
+      );
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 9. Get Shared Materials in Room
+app.get('/api/coop/rooms/:roomId/materials', authenticateToken, async (req, res) => {
+  const { roomId } = req.params;
+
+  try {
+    const materials = await db.query(
+      `SELECT m.* 
+       FROM coop_room_materials rm
+       JOIN materials m ON rm.material_id = m.id
+       WHERE rm.room_id = ?`,
+      [roomId]
+    );
+
+    res.json(mapBoolsArray(materials, ['is_summarized', 'embedding_done']));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 10. Complete Room (Creator or auto)
+app.post('/api/coop/rooms/:roomId/complete', authenticateToken, async (req, res) => {
+  const { roomId } = req.params;
+
+  try {
+    const nowStr = new Date().toISOString();
+    await db.query(
+      'UPDATE coop_rooms SET status = "completed", completed_at = ? WHERE id = ?',
+      [nowStr, roomId]
+    );
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 
 // Start Express Server
 db.initializeDatabase().then(() => {

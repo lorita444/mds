@@ -163,6 +163,15 @@ export async function getMaterials(subjectId: string): Promise<Material[]> {
   }
 }
 
+export async function getAllUserMaterials(userId: string): Promise<Material[]> {
+  try {
+    return await apiFetch(`/materials?userId=${userId}`);
+  } catch (e) {
+    console.error(e);
+    return [];
+  }
+}
+
 export async function getMaterialsByChapter(chapterId: string): Promise<Material[]> {
   try {
     return await apiFetch(`/materials?chapterId=${chapterId}`);
@@ -450,74 +459,55 @@ export async function finalizeQuiz(
   });
 }
 
-// ── CO-OP (Simulated locally via API mock) ───────────────────
+// ── CO-OP (Bază de date locală & API) ─────────────────────────
 
 export async function createCoopRoom(
   userId: string,
   durationSeconds: number,
   joinCode: string,
 ): Promise<CoopRoom | null> {
-  // Mock co-op room response
-  const roomId = Math.random().toString(36).substring(7);
-  return {
-    id: roomId,
-    created_by: userId,
-    join_code: joinCode.toUpperCase(),
-    duration_seconds: durationSeconds,
-    status: 'waiting',
-    started_at: null,
-    completed_at: null,
-    created_at: new Date().toISOString(),
-  };
+  try {
+    return await apiFetch('/coop/rooms', {
+      method: 'POST',
+      body: JSON.stringify({ durationSeconds, joinCode }),
+    });
+  } catch (e) {
+    console.error(e);
+    return null;
+  }
 }
 
 export async function joinCoopRoom(
   joinCode: string,
   userId: string,
 ): Promise<CoopRoom | null> {
-  const roomId = Math.random().toString(36).substring(7);
-  return {
-    id: roomId,
-    created_by: 'ai_simulated_user',
-    join_code: joinCode.toUpperCase(),
-    duration_seconds: 1800,
-    status: 'waiting',
-    started_at: null,
-    completed_at: null,
-    created_at: new Date().toISOString(),
-  };
+  try {
+    return await apiFetch('/coop/rooms/join', {
+      method: 'POST',
+      body: JSON.stringify({ joinCode }),
+    });
+  } catch (e) {
+    console.error(e);
+    return null;
+  }
 }
 
 export async function getCoopRoom(roomId: string): Promise<CoopRoom | null> {
-  return {
-    id: roomId,
-    created_by: 'simulated',
-    join_code: 'XYZ123',
-    duration_seconds: 1800,
-    status: 'active',
-    started_at: new Date().toISOString(),
-    completed_at: null,
-    created_at: new Date().toISOString(),
-  };
+  try {
+    return await apiFetch(`/coop/rooms/${roomId}`);
+  } catch (e) {
+    console.error(e);
+    return null;
+  }
 }
 
 export async function getCoopMembers(roomId: string): Promise<CoopRoomMember[]> {
-  return [
-    {
-      id: 'm1',
-      room_id: roomId,
-      user_id: 'user1',
-      status: 'active',
-      joined_at: new Date().toISOString(),
-    },
-    {
-      id: 'm2',
-      room_id: roomId,
-      user_id: 'simulated_peer',
-      status: 'ready',
-      joined_at: new Date().toISOString(),
-    }
-  ];
+  try {
+    return await apiFetch(`/coop/rooms/${roomId}/members`);
+  } catch (e) {
+    console.error(e);
+    return [];
+  }
 }
 
 export async function updateCoopMemberStatus(
@@ -525,15 +515,54 @@ export async function updateCoopMemberStatus(
   userId: string,
   status: CoopRoomMember['status'],
 ): Promise<void> {
-  console.log(`Mock updated member status: Room ${roomId}, User ${userId} -> ${status}`);
+  try {
+    await apiFetch(`/coop/rooms/${roomId}/members/status`, {
+      method: 'POST',
+      body: JSON.stringify({ status }),
+    });
+  } catch (e) {
+    console.error(e);
+  }
 }
 
 export async function startCoopRoom(roomId: string): Promise<void> {
-  console.log(`Mock started Coop room ${roomId}`);
+  try {
+    await apiFetch(`/coop/rooms/${roomId}/start`, {
+      method: 'POST',
+    });
+  } catch (e) {
+    console.error(e);
+  }
 }
 
 export async function completeCoopRoom(roomId: string): Promise<void> {
-  console.log(`Mock completed Coop room ${roomId}`);
+  try {
+    await apiFetch(`/coop/rooms/${roomId}/complete`, {
+      method: 'POST',
+    });
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+export async function addCoopMaterial(roomId: string, materialId: string): Promise<void> {
+  try {
+    await apiFetch(`/coop/rooms/${roomId}/materials`, {
+      method: 'POST',
+      body: JSON.stringify({ materialId }),
+    });
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+export async function getCoopMaterials(roomId: string): Promise<Material[]> {
+  try {
+    return await apiFetch(`/coop/rooms/${roomId}/materials`);
+  } catch (e) {
+    console.error(e);
+    return [];
+  }
 }
 
 // ── STREAKS ──────────────────────────────────────────────────

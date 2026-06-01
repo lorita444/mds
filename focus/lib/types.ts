@@ -169,7 +169,7 @@ export type AIChatMessage = {
   created_at: string;
 };
 
-export type CoopRoomStatus = 'waiting' | 'active' | 'completed' | 'abandoned';
+export type CoopRoomStatus = 'waiting' | 'starting' | 'active' | 'completed' | 'abandoned';
 
 export type CoopRoom = {
   id: string;
@@ -182,7 +182,7 @@ export type CoopRoom = {
   created_at: string;
 };
 
-export type CoopMemberStatus = 'joined' | 'ready' | 'active' | 'completed' | 'abandoned';
+export type CoopMemberStatus = 'joined' | 'ready' | 'accepted' | 'active' | 'completed' | 'abandoned';
 
 export type CoopRoomMember = {
   id: string;

@@ -277,6 +277,48 @@ async function initializeDatabase() {
       ) ENGINE=InnoDB;
     `);
 
+    // 16. Cooperative Study Rooms (Co-op)
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS coop_rooms (
+        id VARCHAR(36) PRIMARY KEY,
+        created_by VARCHAR(36) NOT NULL,
+        join_code VARCHAR(50) NOT NULL UNIQUE,
+        duration_seconds INT NOT NULL,
+        status VARCHAR(50) NOT NULL DEFAULT 'waiting', -- 'waiting', 'starting', 'active', 'completed'
+        started_at TIMESTAMP NULL DEFAULT NULL,
+        completed_at TIMESTAMP NULL DEFAULT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB;
+    `);
+
+    // 17. Cooperative Study Room Members
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS coop_room_members (
+        id VARCHAR(36) PRIMARY KEY,
+        room_id VARCHAR(36) NOT NULL,
+        user_id VARCHAR(36) NOT NULL,
+        status VARCHAR(50) NOT NULL DEFAULT 'joined', -- 'joined', 'accepted', 'completed', 'abandoned'
+        joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY unique_room_user (room_id, user_id),
+        FOREIGN KEY (room_id) REFERENCES coop_rooms(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB;
+    `);
+
+    // 18. Cooperative Study Room Shared Materials
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS coop_room_materials (
+        id VARCHAR(36) PRIMARY KEY,
+        room_id VARCHAR(36) NOT NULL,
+        material_id VARCHAR(36) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY unique_room_material (room_id, material_id),
+        FOREIGN KEY (room_id) REFERENCES coop_rooms(id) ON DELETE CASCADE,
+        FOREIGN KEY (material_id) REFERENCES materials(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB;
+    `);
+
     console.log('MySQL Database Schema Initialized Successfully!');
   } catch (error) {
     console.error('Error initializing MySQL database schema:', error);
