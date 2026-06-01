@@ -17,8 +17,11 @@ import {
   saveQuizAnswer,
   finalizeQuiz,
   completeSession,
+  getStudySession,
+  getMaterials,
 } from '../../lib/db';
-import { supabase } from '../../lib/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase, API_URL } from '../../lib/supabase';
 import { generateQuizFromContext } from '../../lib/ollama';
 import { colors, spacing, typography, radius } from '../../utils/theme';
 import { Button } from '../../components/ui/Button';
@@ -38,19 +41,25 @@ async function insertQuizQuestions(
   }[],
 ): Promise<QuizQuestion[]> {
   const rows = questions.map((q, i) => ({
-    quiz_id: quizId,
     question_text: q.question_text,
     question_type: q.question_type,
     options: q.options,
     correct_answer: q.correct_answer,
     order_index: i,
   }));
-  const { data, error } = await supabase
-    .from('quiz_questions')
-    .insert(rows)
-    .select();
-  if (error) throw error;
-  return (data ?? []) as QuizQuestion[];
+  
+  const token = await AsyncStorage.getItem('auth_token');
+  const res = await fetch(`${API_URL}/quiz-questions/batch`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ quiz_id: quizId, questions: rows })
+  });
+  if (!res.ok) throw new Error('Failed to insert quiz questions');
+  const updated = await getQuizWithQuestions(quizId);
+  return updated?.questions || [];
 }
 
 export default function QuizScreen() {
@@ -105,21 +114,24 @@ export default function QuizScreen() {
         context = summaries.join('\n\n---\n\n').slice(0, 12000);
       }
 
-      if (!context) {
+      let subjectName = 'your subject';
+      
+      if (!context && sessionId) {
         // Fallback: fetch subject materials via session
-        const { data: session } = await supabase
-          .from('study_sessions')
-          .select('subject_id')
-          .eq('id', sessionId)
-          .single();
+        const session = await getStudySession(sessionId);
         if (session?.subject_id) {
-          const { data: mats } = await supabase
-            .from('materials')
-            .select('summary')
-            .eq('subject_id', session.subject_id)
-            .not('summary', 'is', null)
-            .limit(5);
-          context = (mats ?? []).map((m: { summary: string }) => m.summary).join('\n\n---\n\n');
+          const mats = await getMaterials(session.subject_id);
+          context = (mats ?? [])
+            .filter(m => m.summary)
+            .slice(0, 5)
+            .map(m => m.summary as string)
+            .join('\n\n---\n\n');
+          subjectName = session.subject_name || 'your subject';
+        }
+      } else if (sessionId) {
+        const session = await getStudySession(sessionId);
+        if (session) {
+          subjectName = session.subject_name || 'your subject';
         }
       }
 
@@ -131,15 +143,6 @@ export default function QuizScreen() {
         );
         return;
       }
-
-      // Fetch subject name for context
-      const { data: session } = await supabase
-        .from('study_sessions')
-        .select('subjects(name)')
-        .eq('id', sessionId)
-        .single();
-      const subjectName =
-        (session?.subjects as unknown as { name: string } | null)?.name ?? 'your subject';
 
       const generated = await generateQuizFromContext(context, subjectName, 5);
       const saved = await insertQuizQuestions(quizId, generated);

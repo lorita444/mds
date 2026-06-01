@@ -15,7 +15,7 @@ import { AI_AVATAR } from '../../utils/assets';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/auth-context';
-import { getChatHistory, saveMessage, getMaterials, getChapters } from '../../lib/db';
+import { getChatHistory, saveMessage, getMaterials, getChapters, getSubject } from '../../lib/db';
 import { supabase } from '../../lib/supabase';
 import {
   answerWithContext,
@@ -61,12 +61,12 @@ export default function AIChatScreen() {
       const [history, materials, subjectRes, chapters] = await Promise.all([
         getChatHistory(subjectId),
         getMaterials(subjectId),
-        supabase.from('subjects').select('name').eq('id', subjectId).single(),
+        getSubject(subjectId),
         getChapters(subjectId),
       ]);
       setMessages(history);
       setHasMaterials(materials.length > 0);
-      setSubjectName(subjectRes.data?.name ?? 'Subject');
+      setSubjectName(subjectRes?.name ?? 'Subject');
       chaptersRef.current = chapters;
       summariesRef.current = materials
         .map((m) => m.summary)

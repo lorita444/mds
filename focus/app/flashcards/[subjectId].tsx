@@ -18,6 +18,7 @@ import {
   deleteFlashcard,
   getChapters,
   getMaterials,
+  getSubject,
 } from '../../lib/db';
 import { generateFlashcardsFromText } from '../../lib/ollama';
 import { supabase } from '../../lib/supabase';
@@ -241,11 +242,11 @@ export default function FlashcardsScreen() {
       const [flashcards, chaptersList, subjectRes] = await Promise.all([
         getFlashcards(subjectId),
         getChapters(subjectId),
-        supabase.from('subjects').select('name').eq('id', subjectId).single(),
+        getSubject(subjectId),
       ]);
       setCards(flashcards);
       setChapters(chaptersList);
-      setSubjectName(subjectRes.data?.name ?? 'Subject');
+      setSubjectName(subjectRes?.name ?? 'Subject');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load flashcards');
     } finally {

@@ -5,9 +5,12 @@ import {
   useState,
   type PropsWithChildren,
 } from 'react';
-import { type Session, type User } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase, API_URL } from '../lib/supabase';
 import type { UserProfile } from '../lib/types';
+
+export type Session = { access_token: string; user?: any };
+export type User = { id: string; email: string; username?: string };
 
 type AuthContextValue = {
   session: Session | null;
@@ -28,16 +31,25 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [loadingMessage, setLoadingMessage] = useState('Checking your session...');
 
   const fetchProfile = async (userId: string) => {
-    const { data } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', userId)
-      .single();
-    setProfile(data ?? null);
+    try {
+      const token = await AsyncStorage.getItem('auth_token');
+      const res = await fetch(`${API_URL}/users/profile/${userId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setProfile(data ?? null);
+      } else {
+        setProfile(null);
+      }
+    } catch (e) {
+      console.error('Failed to fetch profile', e);
+      setProfile(null);
+    }
   };
 
   const refreshProfile = async () => {
-    if (session?.user.id) {
+    if (session?.user?.id) {
       await fetchProfile(session.user.id);
     }
   };
@@ -45,7 +57,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      if (session?.user.id) {
+      if (session?.user?.id) {
         setLoadingMessage('Loading your profile...');
         fetchProfile(session.user.id).finally(() => setLoading(false));
       } else {
@@ -56,7 +68,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
         setSession(session);
-        if (session?.user.id) {
+        if (session?.user?.id) {
           await fetchProfile(session.user.id);
         } else {
           setProfile(null);
