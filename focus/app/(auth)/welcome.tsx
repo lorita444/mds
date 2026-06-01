@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
-  Image,
   Pressable,
   StyleSheet,
   Animated,
@@ -11,7 +10,6 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography, radius } from '../../utils/theme';
 import { getPlanetImage, BG_COSMIC_DEEP, BG_STARS } from '../../utils/assets';
 
@@ -54,10 +52,10 @@ const STARTER_ITEMS = [
 ] as const;
 
 const HOW_IT_GROWS = [
-  { icon: 'time-outline' as const, text: 'Complete focus sessions to earn crystals and universe elements' },
-  { icon: 'planet-outline' as const, text: 'Place planets, aliens, and structures into your universe' },
-  { icon: 'flash-outline' as const, text: 'Longer sessions unlock rarer, more powerful items' },
-  { icon: 'people-outline' as const, text: 'Study with friends in co-op for exclusive rewards' },
+  { icon: '⏱', text: 'Complete focus sessions to earn crystals and universe elements' },
+  { icon: '🪐', text: 'Place planets, aliens, and structures into your universe' },
+  { icon: '⚡', text: 'Longer sessions unlock rarer, more powerful items' },
+  { icon: '👥', text: 'Study with friends in co-op for exclusive rewards' },
 ];
 
 export default function WelcomeScreen() {
@@ -220,7 +218,7 @@ export default function WelcomeScreen() {
           {HOW_IT_GROWS.map((tip) => (
             <View key={tip.text} style={styles.tipRow}>
               <View style={styles.tipIcon}>
-                <Ionicons name={tip.icon} size={15} color={colors.cosmic.purpleLight} />
+                <Text style={styles.tipIconText}>{tip.icon}</Text>
               </View>
               <Text style={styles.tipText}>{tip.text}</Text>
             </View>
@@ -236,7 +234,7 @@ export default function WelcomeScreen() {
               pressed && { opacity: 0.85, transform: [{ scale: 0.97 }] },
             ]}
           >
-            <Ionicons name="rocket-outline" size={20} color="#fff" />
+            <Text style={styles.ctaIcon}>🚀</Text>
             <Text style={styles.ctaText}>Enter My Universe</Text>
           </Pressable>
           <Text style={styles.ctaHint}>Your starter planet is ready to explore</Text>
@@ -393,6 +391,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 1,
   },
+  tipIconText: {
+    color: colors.cosmic.purpleLight,
+    fontSize: 15,
+    lineHeight: 18,
+  },
   tipText: {
     flex: 1,
     color: colors.text.secondary,
@@ -424,6 +427,11 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.md,
     fontWeight: '700',
     letterSpacing: 0.5,
+  },
+  ctaIcon: {
+    color: '#fff',
+    fontSize: 18,
+    lineHeight: 22,
   },
   ctaHint: {
     color: colors.text.muted,
