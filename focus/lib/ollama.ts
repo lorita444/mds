@@ -24,7 +24,7 @@ type Message = { role: Role; content: string };
 
 export async function ollamaChat(
   messages: Message[],
-  opts: { temperature?: number; maxTokens?: number } = {},
+  opts: { temperature?: number; maxTokens?: number; format?: object } = {},
 ): Promise<string> {
   const res = await fetch(`${OLLAMA_PROXY}/chat`, {
     method: 'POST',
@@ -33,6 +33,7 @@ export async function ollamaChat(
       model: CHAT_MODEL,
       messages,
       stream: false,
+      ...(opts.format ? { format: opts.format } : {}),
       options: {
         temperature: opts.temperature ?? 0.4,
         num_predict: opts.maxTokens ?? 1024,
@@ -147,7 +148,22 @@ Format: [{"question":"...","answer":"...","difficulty":"easy"|"medium"|"hard"}]`
         content: `Generate ${count} high-quality flashcards from this material:\n\n${text.slice(0, 8000)}`,
       },
     ],
-    { temperature: 0.5, maxTokens: 2048 },
+    {
+      temperature: 0.5,
+      maxTokens: 2048,
+      format: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            question: { type: 'string' },
+            answer: { type: 'string' },
+            difficulty: { type: 'string', enum: ['easy', 'medium', 'hard'] },
+          },
+          required: ['question', 'answer', 'difficulty'],
+        },
+      },
+    },
   );
 
   try {
@@ -186,7 +202,26 @@ For multiple_choice: 4 options, correct_answer = one of them.`,
       },
       { role: 'user', content: context.slice(0, 8000) },
     ],
-    { temperature: 0.4, maxTokens: 2048 },
+    {
+      temperature: 0.4,
+      maxTokens: 2048,
+      format: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            question_text: { type: 'string' },
+            question_type: {
+              type: 'string',
+              enum: ['multiple_choice', 'true_false', 'short_answer'],
+            },
+            options: { type: ['array', 'null'], items: { type: 'string' } },
+            correct_answer: { type: 'string' },
+          },
+          required: ['question_text', 'question_type', 'correct_answer'],
+        },
+      },
+    },
   );
 
   try {

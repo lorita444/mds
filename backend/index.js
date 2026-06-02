@@ -833,6 +833,7 @@ app.post('/api/flashcards', async (req, res) => {
     const createdCards = [];
     for (const card of cards) {
       const id = generateUUID();
+      console.log('[FLASHCARD INSERT]', JSON.stringify(card, null, 2));
       await db.query(
         `INSERT INTO flashcards (id, subject_id, chapter_id, user_id, question, answer, difficulty, review_status)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -1503,6 +1504,7 @@ app.post('/api/ollama/chat', async (req, res) => {
       return res.status(r.status).json({ error: text });
     }
     const data = await r.json();
+    console.log('[OLLAMA CHAT RESPONSE]', JSON.stringify(data?.message?.content ?? data, null, 2));
     res.json(data);
   } catch (err) {
     res.status(503).json({ error: `Ollama unreachable: ${err.message}` });
