@@ -45,11 +45,13 @@ export function AuthLoadingOverlay({ visible, message, subtitle }: Props) {
       pointerEvents={visible ? 'auto' : 'none'}
       style={[styles.overlay, { opacity }]}
     >
-      {/* Atmospheric bloom */}
-      <Animated.View style={[styles.ring, { width: W * 0.80, height: W * 0.80, borderRadius: W * 0.40, opacity: r1 }]} />
-      <Animated.View style={[styles.ring, { width: W * 0.58, height: W * 0.58, borderRadius: W * 0.29, opacity: r2 }]} />
-      <Animated.View style={[styles.ring, { width: W * 0.36, height: W * 0.36, borderRadius: W * 0.18, opacity: r3 }]} />
-      <Animated.View style={[styles.innerRing, { width: W * 0.22, height: W * 0.22, borderRadius: W * 0.11, opacity: r4 }]} />
+      {/* Atmospheric bloom — wrapped in absolute fill so rings center properly */}
+      <View style={styles.ringsContainer}>
+        <Animated.View style={[styles.ring, { width: W * 0.80, height: W * 0.80, borderRadius: W * 0.40, opacity: r1 }]} />
+        <Animated.View style={[styles.ring, { width: W * 0.58, height: W * 0.58, borderRadius: W * 0.29, opacity: r2 }]} />
+        <Animated.View style={[styles.ring, { width: W * 0.36, height: W * 0.36, borderRadius: W * 0.18, opacity: r3 }]} />
+        <Animated.View style={[styles.innerRing, { width: W * 0.22, height: W * 0.22, borderRadius: W * 0.11, opacity: r4 }]} />
+      </View>
 
       <View style={styles.iconWrapper}>
         <Image source={APP_ICON} style={styles.icon} resizeMode="contain" />
@@ -73,6 +75,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     zIndex: 999,
     gap: spacing.xl,
+  },
+  ringsContainer: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   ring: {
     position: 'absolute',

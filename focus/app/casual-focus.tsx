@@ -12,7 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/auth-context';
-import { createStudySession, completeSession, abandonSession, getSubjects } from '../lib/db';
+import { createStudySession, completeSession, abandonSession, getSubjects, createQuiz } from '../lib/db';
 import {
   scheduleActiveSessionTimer,
   cancelActiveSessionNotifications,
@@ -61,6 +61,11 @@ export default function CasualFocusScreen() {
   const [loadingSubjects, setLoadingSubjects] = useState(true);
   const [remaining, setRemaining] = useState(DURATIONS[2].seconds);
   const [completing, setCompleting] = useState(false);
+  const [withQuiz, setWithQuiz] = useState(false);
+  const [quizId, setQuizId] = useState<string | null>(null);
+
+  const quizIdRef = useRef<string | null>(null);
+  const selectedSubjectIdRef = useRef<string | null>(paramSubjectId ?? null);
 
   const [showCustomModal, setShowCustomModal] = useState(false);
   const [customMinutesInput, setCustomMinutesInput] = useState('');
@@ -94,6 +99,9 @@ export default function CasualFocusScreen() {
   const pausedAtRef = useRef<number>(0);
   const totalPausedMsRef = useRef<number>(0);
 
+  useEffect(() => { quizIdRef.current = quizId; }, [quizId]);
+  useEffect(() => { selectedSubjectIdRef.current = selectedSubjectId; }, [selectedSubjectId]);
+
   useEffect(() => {
     if (!user?.id) return;
     getSubjects(user.id).then((s) => {
@@ -120,6 +128,19 @@ export default function CasualFocusScreen() {
       (Date.now() - sessionStartRef.current - totalPausedMsRef.current) / 1000,
     );
     try {
+      if (quizIdRef.current && selectedSubjectIdRef.current) {
+        router.replace({
+          pathname: '/quiz/[sessionId]' as never,
+          params: {
+            sessionId: sessionIdRef.current,
+            quizId: quizIdRef.current,
+            durationSeconds: String(elapsed),
+            chapterIds: '',
+          },
+        });
+        return;
+      }
+
       const result = await completeSession(sessionIdRef.current, elapsed);
       router.replace({
         pathname: '/reward-reveal' as never,
@@ -190,6 +211,15 @@ export default function CasualFocusScreen() {
         subject_id: selectedSubjectId ?? undefined,
       });
       if (!session) throw new Error('Failed to create session');
+
+      let generatedQuizId: string | null = null;
+      if (withQuiz && selectedSubjectId) {
+        const quiz = await createQuiz(session.id, user.id, 5);
+        generatedQuizId = quiz?.id ?? null;
+      }
+      setQuizId(generatedQuizId);
+      quizIdRef.current = generatedQuizId;
+
       const now = Date.now();
       sessionIdRef.current = session.id;
       sessionStartRef.current = now;
@@ -290,7 +320,14 @@ export default function CasualFocusScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.rowHeader}>
-          <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backBtn}>
+          <Pressable
+            onPress={() => router.back()}
+            hitSlop={12}
+            style={({ pressed }) => [
+              styles.backBtn,
+              pressed && { opacity: 0.7, transform: [{ scale: 0.94 }], backgroundColor: colors.bg.card },
+            ]}
+          >
             <Ionicons name="chevron-back" size={22} color={colors.text.secondary} />
           </Pressable>
           <View>
@@ -346,7 +383,7 @@ export default function CasualFocusScreen() {
               contentContainerStyle={{ gap: spacing.xs }}
             >
               <Pressable
-                onPress={() => setSelectedSubjectId(null)}
+                onPress={() => { setSelectedSubjectId(null); setWithQuiz(false); setQuizId(null); }}
                 style={[styles.subjectChip, !selectedSubjectId && styles.subjectChipActive]}
               >
                 <Text style={styles.subjectChipText}>None</Text>
@@ -366,6 +403,54 @@ export default function CasualFocusScreen() {
               })}
             </ScrollView>
           </View>
+        )}
+
+        {selectedSubjectId && (
+          <Pressable
+            onPress={() => setWithQuiz((v) => !v)}
+            style={({ pressed }) => ({
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: spacing.md,
+              padding: spacing.md,
+              borderRadius: radius.md,
+              backgroundColor: withQuiz ? colors.cosmic.purpleFaint : colors.bg.card,
+              borderWidth: 1,
+              borderColor: withQuiz ? colors.cosmic.purpleGlow : colors.bg.cardBorder,
+              opacity: pressed ? 0.75 : 1,
+              transform: [{ scale: pressed ? 0.98 : 1 }],
+            })}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: colors.text.primary, fontSize: typography.sizes.sm, fontWeight: typography.weights.semibold }}>
+                📝 End-of-session Quiz
+              </Text>
+              <Text style={{ color: colors.text.muted, fontSize: typography.sizes.xs }}>
+                5 AI questions from your materials. Pass for a rarity bonus.
+              </Text>
+            </View>
+            <View
+              style={{
+                width: 44,
+                height: 24,
+                borderRadius: 12,
+                backgroundColor: withQuiz ? colors.cosmic.purple : colors.bg.elevated,
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 2,
+              }}
+            >
+              <View
+                style={{
+                  width: 20,
+                  height: 20,
+                  borderRadius: 10,
+                  backgroundColor: '#fff',
+                  alignSelf: withQuiz ? 'flex-end' : 'flex-start',
+                }}
+              />
+            </View>
+          </Pressable>
         )}
 
         <Card variant="glow" padding={spacing.md}>
@@ -502,7 +587,13 @@ export default function CasualFocusScreen() {
         )}
 
         {!completing && (
-          <Pressable onPress={confirmAbandon} style={styles.abandonRow}>
+          <Pressable
+            onPress={confirmAbandon}
+            style={({ pressed }) => [
+              styles.abandonRow,
+              pressed && { opacity: 0.7, transform: [{ scale: 0.97 }] },
+            ]}
+          >
             <Ionicons name="close-circle-outline" size={14} color={colors.text.muted} />
             <Text style={styles.abandonText}>Abandon session</Text>
           </Pressable>
@@ -574,6 +665,11 @@ const styles = StyleSheet.create({
   abandonRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 5, paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: 'rgba(239,68,68,0.2)',
+    backgroundColor: 'rgba(239,68,68,0.06)',
+    paddingHorizontal: spacing.lg,
   },
   abandonText: { color: colors.text.muted, fontSize: typography.sizes.sm },
 });

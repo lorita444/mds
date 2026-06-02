@@ -606,6 +606,20 @@ export async function abandonCoopSession(roomId: string): Promise<void> {
 }
 
 
+// ── QUIZ HISTORY ─────────────────────────────────────────────
+
+export async function getQuizResultsBySubject(
+  userId: string,
+  subjectId: string,
+): Promise<{ chapterIds: string[]; correctAnswers: number; totalQuestions: number }[]> {
+  try {
+    return await apiFetch(`/sessions/quiz-results?userId=${userId}&subjectId=${subjectId}`);
+  } catch (e) {
+    console.error(e);
+    return [];
+  }
+}
+
 // ── STREAKS ──────────────────────────────────────────────────
 
 export async function getStreaks(userId: string, days = 30): Promise<Streak[]> {

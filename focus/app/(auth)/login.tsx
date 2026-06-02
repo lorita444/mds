@@ -12,7 +12,7 @@ import {
   StyleSheet,
   type TextInput,
 } from 'react-native';
-import { APP_ICON } from '../../utils/assets';
+import { APP_ICON, BG_COSMIC_DEEP } from '../../utils/assets';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
@@ -128,6 +128,7 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.root}>
+      <Image source={BG_COSMIC_DEEP} style={[StyleSheet.absoluteFillObject, { opacity: 0.30 }]} resizeMode="cover" />
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -224,7 +225,10 @@ export default function LoginScreen() {
 
                 <Pressable
                   onPress={() => { clearErrors(); setMode('forgot'); }}
-                  style={styles.centerLink}
+                  style={({ pressed }) => [
+                    styles.forgotBtn,
+                    pressed && { opacity: 0.7, transform: [{ scale: 0.97 }] },
+                  ]}
                 >
                   <Text style={styles.mutedLink}>Forgot password?</Text>
                 </Pressable>
@@ -260,7 +264,13 @@ export default function LoginScreen() {
                   size="lg"
                 />
 
-                <Pressable onPress={goToLogin} style={styles.centerLink}>
+                <Pressable
+                  onPress={goToLogin}
+                  style={({ pressed }) => [
+                    styles.forgotBtn,
+                    pressed && { opacity: 0.7, transform: [{ scale: 0.97 }] },
+                  ]}
+                >
                   <Text style={styles.mutedLink}>Back to sign in</Text>
                 </Pressable>
               </View>
@@ -288,7 +298,10 @@ export default function LoginScreen() {
           {mode === 'login' && (
             <Pressable
               onPress={() => router.push('/(auth)/signup' as never)}
-              style={styles.centerLink}
+              style={({ pressed }) => [
+                styles.signupBtn,
+                pressed && { opacity: 0.75, transform: [{ scale: 0.97 }] },
+              ]}
             >
               <Text style={styles.secondaryLink}>
                 No account yet?{' '}
@@ -359,6 +372,24 @@ const styles = StyleSheet.create({
   },
   centerLink: {
     alignItems: 'center',
+  },
+  signupBtn: {
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.cosmic.purpleGlow,
+    backgroundColor: colors.cosmic.purpleFaint,
+  },
+  forgotBtn: {
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.bg.cardBorder,
+    backgroundColor: colors.bg.card,
   },
   mutedLink: {
     color: colors.text.muted,

@@ -39,18 +39,14 @@ export function LoadingState({
 
   return (
     <Animated.View style={[styles.container, fullscreen && styles.fullscreen, { opacity: fadeIn }]}>
-      {/* Atmospheric bloom rings — outermost first (painted behind) */}
-      <Animated.View style={[styles.ring, { width: W * 0.94, height: W * 0.94, borderRadius: W * 0.47, opacity: r1 }]} />
-      <Animated.View style={[styles.ring, { width: W * 0.72, height: W * 0.72, borderRadius: W * 0.36, opacity: r2 }]} />
-      <Animated.View style={[styles.ring, { width: W * 0.52, height: W * 0.52, borderRadius: W * 0.26, opacity: r3 }]} />
-      <Animated.View style={[styles.ring, { width: W * 0.32, height: W * 0.32, borderRadius: W * 0.16, opacity: r4 }]} />
-      {/* Innermost aura ring — has a border so the edge reads as a defined halo */}
-      <Animated.View
-        style={[
-          styles.innerRing,
-          { width: W * 0.21, height: W * 0.21, borderRadius: W * 0.105, opacity: r5 },
-        ]}
-      />
+      {/* Rings in absolute fill so they center properly without affecting flex layout */}
+      <View style={styles.ringsContainer}>
+        <Animated.View style={[styles.ring, { width: W * 0.94, height: W * 0.94, borderRadius: W * 0.47, opacity: r1 }]} />
+        <Animated.View style={[styles.ring, { width: W * 0.72, height: W * 0.72, borderRadius: W * 0.36, opacity: r2 }]} />
+        <Animated.View style={[styles.ring, { width: W * 0.52, height: W * 0.52, borderRadius: W * 0.26, opacity: r3 }]} />
+        <Animated.View style={[styles.ring, { width: W * 0.32, height: W * 0.32, borderRadius: W * 0.16, opacity: r4 }]} />
+        <Animated.View style={[styles.innerRing, { width: W * 0.21, height: W * 0.21, borderRadius: W * 0.105, opacity: r5 }]} />
+      </View>
 
       {/* Icon — fixed size, never scales */}
       <View style={styles.iconWrapper}>
@@ -76,6 +72,11 @@ const styles = StyleSheet.create({
   fullscreen: {
     flex: 1,
     backgroundColor: colors.bg.primary,
+  },
+  ringsContainer: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   ring: {
     position: 'absolute',

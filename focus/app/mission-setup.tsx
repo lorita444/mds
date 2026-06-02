@@ -20,8 +20,9 @@ import {
   createQuiz,
   placeWager,
   getActiveUniverseItems,
+  getQuizResultsBySubject,
 } from '../lib/db';
-import { estimateStudyDuration } from '../lib/ollama';
+import { estimateStudyDuration, recommendWeakChapters } from '../lib/ollama';
 import { colors, spacing, typography, radius } from '../utils/theme';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -78,6 +79,8 @@ export default function MissionSetupScreen() {
     setCustomMinutesInput('');
   };
 
+  const [weakChapterIds, setWeakChapterIds] = useState<Record<string, string>>({});
+
   const [withQuiz, setWithQuiz] = useState(false);
   const [wagerType, setWagerType] = useState<'none' | 'crystals' | 'item'>('none');
   const [crystalWager, setCrystalWager] = useState(100);
@@ -99,11 +102,25 @@ export default function MissionSetupScreen() {
   }, [user?.id]);
 
   useEffect(() => {
-    if (!selectedSubjectId) { setChapters([]); return; }
-    getChapters(selectedSubjectId).then(setChapters);
+    if (!selectedSubjectId) {
+      setChapters([]);
+      setWeakChapterIds({});
+      return;
+    }
     setSelectedChapterIds(new Set());
     setEstimatedMinutes(null);
-  }, [selectedSubjectId]);
+    setWeakChapterIds({});
+    getChapters(selectedSubjectId).then((fetched) => {
+      setChapters(fetched);
+      if (!user?.id || fetched.length === 0) return;
+      getQuizResultsBySubject(user.id, selectedSubjectId).then((history) => {
+        const recs = recommendWeakChapters(history, fetched);
+        const map: Record<string, string> = {};
+        recs.forEach((r) => { map[r.chapterId] = r.reason; });
+        setWeakChapterIds(map);
+      });
+    });
+  }, [selectedSubjectId, user?.id]);
 
   const toggleChapter = (id: string) => {
     setSelectedChapterIds((prev) => {
@@ -240,7 +257,17 @@ export default function MissionSetupScreen() {
     >
       {/* Header */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-        <Pressable onPress={() => router.back()}>
+        <Pressable
+          onPress={() => router.back()}
+          style={({ pressed }) => ({
+            width: 36, height: 36, borderRadius: 18,
+            backgroundColor: colors.bg.elevated,
+            borderWidth: 1, borderColor: colors.bg.cardBorder,
+            alignItems: 'center', justifyContent: 'center',
+            opacity: pressed ? 0.7 : 1,
+            transform: [{ scale: pressed ? 0.95 : 1 }],
+          })}
+        >
           <Text style={{ color: colors.text.muted, fontSize: typography.sizes.lg }}>‹</Text>
         </Pressable>
         <Text
@@ -269,10 +296,29 @@ export default function MissionSetupScreen() {
             Subject
           </Text>
           {subjects.length === 0 ? (
-            <Card variant="flat" padding={spacing.md}>
-              <Text style={{ color: colors.text.muted, fontSize: typography.sizes.sm, textAlign: 'center' }}>
-                No subjects yet — create one in Portfolio first.
-              </Text>
+            <Card variant="flat" padding={spacing.lg}>
+              <View style={{ gap: spacing.md, alignItems: 'center' }}>
+                <Text style={{ color: colors.text.muted, fontSize: typography.sizes.sm, textAlign: 'center' }}>
+                  No subjects yet — create one in Portfolio first.
+                </Text>
+                <Pressable
+                  onPress={() => router.replace('/(tabs)/portfolio' as never)}
+                  style={({ pressed }) => ({
+                    paddingVertical: spacing.sm + 2,
+                    paddingHorizontal: spacing.xl,
+                    borderRadius: radius.lg,
+                    borderWidth: 1,
+                    borderColor: colors.cosmic.purpleGlow,
+                    backgroundColor: colors.cosmic.purpleFaint,
+                    opacity: pressed ? 0.75 : 1,
+                    transform: [{ scale: pressed ? 0.97 : 1 }],
+                  })}
+                >
+                  <Text style={{ color: colors.cosmic.purpleLight, fontSize: typography.sizes.sm, fontWeight: typography.weights.semibold }}>
+                    Go to Portfolio →
+                  </Text>
+                </Pressable>
+              </View>
             </Card>
           ) : (
             <View style={{ gap: spacing.xs }}>
@@ -348,9 +394,27 @@ export default function MissionSetupScreen() {
           </Text>
           {chapters.length === 0 ? (
             <Card variant="flat" padding={spacing.md}>
-              <Text style={{ color: colors.text.muted, fontSize: typography.sizes.sm, textAlign: 'center' }}>
-                No chapters in this subject yet.
-              </Text>
+              <View style={{ alignItems: 'center', gap: spacing.sm }}>
+                <Text style={{ color: colors.text.muted, fontSize: typography.sizes.sm, textAlign: 'center' }}>
+                  No chapters in this subject yet. The full subject will be used.
+                </Text>
+                <Pressable
+                  onPress={() => router.push(`/subject/${selectedSubjectId}` as never)}
+                  style={({ pressed }) => ({
+                    paddingVertical: spacing.xs + 2,
+                    paddingHorizontal: spacing.md,
+                    borderRadius: radius.md,
+                    borderWidth: 1,
+                    borderColor: colors.bg.cardBorder,
+                    backgroundColor: pressed ? colors.bg.elevated : colors.bg.card,
+                    opacity: pressed ? 0.8 : 1,
+                  })}
+                >
+                  <Text style={{ color: colors.text.secondary, fontSize: typography.sizes.xs, fontWeight: typography.weights.medium }}>
+                    Add chapters in Portfolio →
+                  </Text>
+                </Pressable>
+              </View>
             </Card>
           ) : (
             <View style={{ gap: spacing.xs }}>
@@ -397,6 +461,24 @@ export default function MissionSetupScreen() {
                     >
                       {c.name}
                     </Text>
+                    {weakChapterIds[c.id] && (
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 3,
+                          backgroundColor: 'rgba(239,68,68,0.12)',
+                          borderRadius: radius.full,
+                          paddingHorizontal: 6,
+                          paddingVertical: 2,
+                        }}
+                      >
+                        <Text style={{ fontSize: 9 }}>⚠️</Text>
+                        <Text style={{ color: colors.status.error, fontSize: typography.sizes.xs }}>
+                          {weakChapterIds[c.id]}
+                        </Text>
+                      </View>
+                    )}
                   </Pressable>
                 );
               })}
@@ -788,15 +870,11 @@ export default function MissionSetupScreen() {
       )}
 
       {!selectedSubjectId && subjects.length > 0 && (
-        <Text
-          style={{
-            color: colors.text.muted,
-            fontSize: typography.sizes.sm,
-            textAlign: 'center',
-          }}
-        >
-          Select a subject to configure your mission.
-        </Text>
+        <Card variant="flat" padding={spacing.md}>
+          <Text style={{ color: colors.text.muted, fontSize: typography.sizes.sm, textAlign: 'center' }}>
+            ☝️ Select a subject above to configure your mission.
+          </Text>
+        </Card>
       )}
       <Modal
         visible={showCustomModal}

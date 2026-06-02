@@ -1,4 +1,4 @@
-import { Pressable, Text, ActivityIndicator, View, type PressableProps } from 'react-native';
+import { Pressable, Text, ActivityIndicator, type PressableProps } from 'react-native';
 import { colors, radius, typography, spacing } from '../../utils/theme';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'crystal';
@@ -14,6 +14,7 @@ type ShadowStyle = {
 
 type VariantStyle = {
   bg: string;
+  bgPressed: string;
   border: string;
   text: string;
   shadow?: ShadowStyle;
@@ -31,6 +32,7 @@ type ButtonProps = PressableProps & {
 const variantStyles: Record<Variant, VariantStyle> = {
   primary: {
     bg: colors.cosmic.purple,
+    bgPressed: '#6b2fd6',
     border: 'rgba(167,139,250,0.6)',
     text: colors.text.primary,
     shadow: {
@@ -43,16 +45,20 @@ const variantStyles: Record<Variant, VariantStyle> = {
   },
   secondary: {
     bg: colors.bg.elevated,
+    bgPressed: '#1c1c40',
     border: 'rgba(139,92,246,0.35)',
     text: colors.text.primary,
   },
   ghost: {
-    bg: 'transparent',
+    // Subtle purple tint — visually distinguishable from plain text
+    bg: colors.cosmic.purpleFaint,
+    bgPressed: 'rgba(124,58,237,0.22)',
     border: 'rgba(139,92,246,0.45)',
     text: colors.text.accent,
   },
   danger: {
     bg: colors.status.error,
+    bgPressed: '#d93535',
     border: 'rgba(239,68,68,0.5)',
     text: colors.text.primary,
     shadow: {
@@ -65,6 +71,7 @@ const variantStyles: Record<Variant, VariantStyle> = {
   },
   crystal: {
     bg: 'rgba(56,189,248,0.14)',
+    bgPressed: 'rgba(56,189,248,0.24)',
     border: 'rgba(56,189,248,0.5)',
     text: colors.crystal.primary,
     shadow: {
@@ -103,7 +110,7 @@ export function Button({
       disabled={isDisabled}
       style={({ pressed }) => [
         {
-          backgroundColor: v.bg,
+          backgroundColor: pressed && !isDisabled ? v.bgPressed : v.bg,
           borderWidth: 1,
           borderColor: v.border,
           borderRadius: s.borderRadius,
@@ -114,9 +121,8 @@ export function Button({
           flexDirection: 'row' as const,
           gap: spacing.sm,
           alignSelf: fullWidth ? ('stretch' as const) : ('auto' as const),
-          opacity: isDisabled ? 0.45 : 1,
+          opacity: isDisabled ? 0.45 : pressed ? 0.88 : 1,
           transform: [{ scale: pressed && !isDisabled ? 0.97 : 1 }],
-          // Glow shadow (only when not disabled, not pressed)
           ...(v.shadow && !isDisabled && !pressed ? v.shadow : {}),
         },
         style as object,

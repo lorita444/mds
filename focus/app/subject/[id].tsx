@@ -254,7 +254,21 @@ export default function SubjectDetailScreen() {
       }
     >
       {/* Back */}
-      <Pressable onPress={() => router.back()} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+      <Pressable
+        onPress={() => router.back()}
+        style={({ pressed }) => ({
+          flexDirection: 'row', alignItems: 'center', gap: 6,
+          alignSelf: 'flex-start',
+          paddingVertical: spacing.xs + 2,
+          paddingHorizontal: spacing.sm + 2,
+          borderRadius: radius.md,
+          borderWidth: 1,
+          borderColor: colors.bg.cardBorder,
+          backgroundColor: colors.bg.elevated,
+          opacity: pressed ? 0.7 : 1,
+          transform: [{ scale: pressed ? 0.97 : 1 }],
+        })}
+      >
         <Text style={{ color: colors.text.muted, fontSize: typography.sizes.sm }}>‹ Portfolio</Text>
       </Pressable>
 
@@ -304,6 +318,7 @@ export default function SubjectDetailScreen() {
                 alignItems: 'center',
                 gap: 6,
                 opacity: pressed ? 0.8 : 1,
+                transform: [{ scale: pressed ? 0.96 : 1 }],
               })}
             >
               <Image source={AI_AVATAR} style={{ width: 26, height: 26 }} resizeMode="contain" />
@@ -323,6 +338,7 @@ export default function SubjectDetailScreen() {
                 alignItems: 'center',
                 gap: 6,
                 opacity: pressed ? 0.8 : 1,
+                transform: [{ scale: pressed ? 0.96 : 1 }],
               })}
             >
               <Text style={{ fontSize: 22 }}>🃏</Text>
@@ -347,6 +363,7 @@ export default function SubjectDetailScreen() {
                 alignItems: 'center',
                 gap: 6,
                 opacity: pressed ? 0.8 : 1,
+                transform: [{ scale: pressed ? 0.96 : 1 }],
               })}
             >
               <Text style={{ fontSize: 22 }}>🎯</Text>
@@ -370,7 +387,7 @@ export default function SubjectDetailScreen() {
               >
                 Chapters ({chapters.length})
               </Text>
-              <Button label="+ Chapter" size="sm" variant="ghost" onPress={() => setShowAddChapter(true)} />
+              <Button label="+ Add Chapter" size="sm" variant="secondary" onPress={() => setShowAddChapter(true)} />
             </View>
 
             {chapters.map((chapter) => {
@@ -393,30 +410,52 @@ export default function SubjectDetailScreen() {
                         </View>
                       </View>
                       <View style={{ flexDirection: 'row', gap: spacing.xs }}>
-                        <Pressable
+                        <Button
+                          label={uploading ? '…' : 'Upload'}
+                          size="sm"
+                          variant="secondary"
                           onPress={() => handleUploadMaterial(chapter.id)}
+                          disabled={uploading}
+                        />
+                        <Pressable
+                          onPress={() => handleDeleteChapter(chapter)}
+                          hitSlop={8}
                           style={({ pressed }) => ({
-                            backgroundColor: colors.cosmic.purpleFaint,
+                            padding: 8,
                             borderRadius: radius.sm,
-                            paddingHorizontal: 10,
-                            paddingVertical: 5,
-                            opacity: pressed ? 0.7 : 1,
+                            borderWidth: 1,
+                            borderColor: 'rgba(239,68,68,0.25)',
+                            backgroundColor: pressed ? 'rgba(239,68,68,0.14)' : 'rgba(239,68,68,0.06)',
+                            opacity: pressed ? 0.8 : 1,
                           })}
                         >
-                          <Text style={{ color: colors.cosmic.purpleLight, fontSize: typography.sizes.xs, fontWeight: typography.weights.semibold }}>
-                            {uploading ? '…' : '+ Upload'}
-                          </Text>
-                        </Pressable>
-                        <Pressable onPress={() => handleDeleteChapter(chapter)} style={{ padding: 5 }}>
-                          <Text style={{ color: colors.text.muted, fontSize: 16 }}>✕</Text>
+                          <Text style={{ color: colors.status.error, fontSize: 14 }}>✕</Text>
                         </Pressable>
                       </View>
                     </View>
 
                     {chapterMaterials.length === 0 ? (
-                      <Text style={{ color: colors.text.muted, fontSize: typography.sizes.xs, paddingLeft: 28 }}>
-                        No materials yet. Tap + Upload to add files.
-                      </Text>
+                      <Pressable
+                        onPress={() => handleUploadMaterial(chapter.id)}
+                        style={({ pressed }) => ({
+                          marginLeft: 28,
+                          borderRadius: radius.md,
+                          borderWidth: 1,
+                          borderColor: colors.cosmic.purpleGlow,
+                          padding: spacing.md,
+                          alignItems: 'center',
+                          flexDirection: 'row',
+                          justifyContent: 'center',
+                          gap: spacing.sm,
+                          backgroundColor: pressed ? colors.cosmic.purpleFaint : `${colors.cosmic.purple}0d`,
+                          opacity: pressed ? 0.8 : 1,
+                        })}
+                      >
+                        <Text style={{ fontSize: 16 }}>📎</Text>
+                        <Text style={{ color: colors.cosmic.purpleLight, fontSize: typography.sizes.xs, fontWeight: typography.weights.medium }}>
+                          Tap to upload first file
+                        </Text>
+                      </Pressable>
                     ) : (
                       chapterMaterials.map((m) => (
                         <MaterialRow key={m.id} material={m} onDelete={() => handleDeleteMaterial(m)} />
@@ -428,10 +467,24 @@ export default function SubjectDetailScreen() {
             })}
 
             {chapters.length === 0 && (
-              <Card variant="flat" padding={spacing.md}>
-                <Text style={{ color: colors.text.muted, fontSize: typography.sizes.sm, textAlign: 'center' }}>
-                  No chapters yet. Create chapters to organize your materials.
-                </Text>
+              <Card variant="flat" padding={spacing.lg}>
+                <View style={{ alignItems: 'center', gap: spacing.md }}>
+                  <Text style={{ fontSize: 36 }}>📂</Text>
+                  <View style={{ alignItems: 'center', gap: spacing.xs }}>
+                    <Text style={{ color: colors.text.primary, fontSize: typography.sizes.sm, fontWeight: typography.weights.semibold, textAlign: 'center' }}>
+                      No chapters yet
+                    </Text>
+                    <Text style={{ color: colors.text.muted, fontSize: typography.sizes.xs, textAlign: 'center', lineHeight: 16 }}>
+                      Chapters help organize your materials by topic or week.
+                    </Text>
+                  </View>
+                  <Button
+                    label="Create First Chapter"
+                    size="sm"
+                    variant="secondary"
+                    onPress={() => setShowAddChapter(true)}
+                  />
+                </View>
               </Card>
             )}
           </View>
@@ -450,26 +503,19 @@ export default function SubjectDetailScreen() {
               >
                 Unassigned Materials
               </Text>
-              <Pressable
+              <Button
+                label={uploading ? 'Uploading…' : 'Upload'}
+                size="sm"
+                variant="secondary"
                 onPress={() => handleUploadMaterial(null)}
-                style={({ pressed }) => ({
-                  backgroundColor: colors.bg.elevated,
-                  borderRadius: radius.sm,
-                  paddingHorizontal: 10,
-                  paddingVertical: 5,
-                  opacity: pressed ? 0.7 : 1,
-                })}
-              >
-                <Text style={{ color: colors.text.secondary, fontSize: typography.sizes.xs }}>
-                  {uploading ? 'Uploading…' : '+ Upload'}
-                </Text>
-              </Pressable>
+                disabled={uploading}
+              />
             </View>
 
             {unassignedMaterials.length === 0 ? (
-              <Card variant="flat" padding={spacing.md}>
-                <Text style={{ color: colors.text.muted, fontSize: typography.sizes.sm, textAlign: 'center' }}>
-                  Upload materials directly to the subject or to a specific chapter.
+              <Card variant="flat" padding={spacing.sm + 4}>
+                <Text style={{ color: colors.text.muted, fontSize: typography.sizes.xs, textAlign: 'center' }}>
+                  Files uploaded here are not tied to any chapter. Use chapters above for better organization.
                 </Text>
               </Card>
             ) : (
@@ -581,8 +627,19 @@ function MaterialRow({ material, onDelete }: { material: Material; onDelete: () 
           )}
         </View>
       </View>
-      <Pressable onPress={onDelete} style={{ padding: 4 }}>
-        <Text style={{ color: colors.text.muted, fontSize: 14 }}>✕</Text>
+      <Pressable
+        onPress={onDelete}
+        hitSlop={8}
+        style={({ pressed }) => ({
+          padding: 8,
+          borderRadius: radius.sm,
+          borderWidth: 1,
+          borderColor: 'rgba(239,68,68,0.25)',
+          backgroundColor: pressed ? 'rgba(239,68,68,0.14)' : 'rgba(239,68,68,0.06)',
+          opacity: pressed ? 0.8 : 1,
+        })}
+      >
+        <Text style={{ color: colors.status.error, fontSize: 14 }}>✕</Text>
       </Pressable>
     </View>
   );

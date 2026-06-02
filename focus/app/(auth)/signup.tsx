@@ -12,7 +12,7 @@ import {
   StyleSheet,
   type TextInput,
 } from 'react-native';
-import { APP_ICON } from '../../utils/assets';
+import { APP_ICON, BG_COSMIC_DEEP } from '../../utils/assets';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
@@ -98,6 +98,7 @@ export default function SignupScreen() {
 
   return (
     <View style={styles.root}>
+      <Image source={BG_COSMIC_DEEP} style={[StyleSheet.absoluteFillObject, { opacity: 0.30 }]} resizeMode="cover" />
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -207,7 +208,18 @@ export default function SignupScreen() {
                   </Text>
                   <Pressable
                     onPress={() => router.replace('/(auth)/login' as never)}
-                    style={{ marginTop: 8 }}
+                    style={({ pressed }) => ({
+                      marginTop: 8,
+                      paddingVertical: 6,
+                      paddingHorizontal: 14,
+                      borderRadius: radius.md,
+                      borderWidth: 1,
+                      borderColor: 'rgba(13,148,136,0.4)',
+                      backgroundColor: 'rgba(13,148,136,0.12)',
+                      alignSelf: 'flex-start',
+                      opacity: pressed ? 0.7 : 1,
+                      transform: [{ scale: pressed ? 0.97 : 1 }],
+                    })}
                   >
                     <Text style={{ color: '#5eead4', fontSize: 13, fontWeight: '700' }}>Go to Sign In →</Text>
                   </Pressable>
@@ -234,7 +246,10 @@ export default function SignupScreen() {
 
           <Pressable
             onPress={() => router.replace('/(auth)/login' as never)}
-            style={styles.centerLink}
+            style={({ pressed }) => [
+              styles.signinBtn,
+              pressed && { opacity: 0.75, transform: [{ scale: 0.97 }] },
+            ]}
           >
             <Text style={styles.secondaryLink}>
               Already exploring?{' '}
@@ -322,6 +337,15 @@ const styles = StyleSheet.create({
   },
   centerLink: {
     alignItems: 'center',
+  },
+  signinBtn: {
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.bg.cardBorder,
+    backgroundColor: colors.bg.card,
   },
   secondaryLink: {
     color: colors.text.secondary,

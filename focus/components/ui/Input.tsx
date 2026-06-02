@@ -53,6 +53,14 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
           borderColor,
           borderRadius: radius.md,
           paddingHorizontal: spacing.md,
+          // Focus glow
+          ...(focused && !error ? {
+            shadowColor: colors.cosmic.purple,
+            shadowOffset: { width: 0, height: 0 },
+            shadowOpacity: 0.35,
+            shadowRadius: 8,
+            elevation: 4,
+          } : {}),
         }}
       >
         <TextInput
@@ -73,8 +81,17 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
           {...props}
         />
         {secure && (
-          <Pressable onPress={() => setShowSecret(!showSecret)} hitSlop={8}>
-            <Text style={{ color: colors.text.muted, fontSize: typography.sizes.sm }}>
+          <Pressable
+            onPress={() => setShowSecret(!showSecret)}
+            hitSlop={12}
+            style={({ pressed }) => ({
+              paddingHorizontal: 4,
+              paddingVertical: 6,
+              borderRadius: radius.sm,
+              backgroundColor: pressed ? colors.bg.elevated : 'transparent',
+            })}
+          >
+            <Text style={{ color: colors.text.secondary, fontSize: typography.sizes.xs, fontWeight: typography.weights.medium }}>
               {showSecret ? 'Hide' : 'Show'}
             </Text>
           </Pressable>

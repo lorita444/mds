@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -22,7 +22,7 @@ import {
 } from '../../lib/db';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase, API_URL } from '../../lib/supabase';
-import { generateQuizFromContext } from '../../lib/ollama';
+import { generateQuizFromContext, explainWrongAnswers } from '../../lib/ollama';
 import { colors, spacing, typography, radius } from '../../utils/theme';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
@@ -83,6 +83,9 @@ export default function QuizScreen() {
     passed: boolean;
     rewardResult: Record<string, unknown> | null;
   } | null>(null);
+  const [explanations, setExplanations] = useState<{ question: string; explanation: string }[]>([]);
+  const [loadingExplanations, setLoadingExplanations] = useState(false);
+  const subjectNameRef = useRef('your subject');
 
   const loadAndGenerate = useCallback(async () => {
     if (!quizId || !user?.id) return;
@@ -115,9 +118,8 @@ export default function QuizScreen() {
       }
 
       let subjectName = 'your subject';
-      
+
       if (!context && sessionId) {
-        // Fallback: fetch subject materials via session
         const session = await getStudySession(sessionId);
         if (session?.subject_id) {
           const mats = await getMaterials(session.subject_id);
@@ -134,6 +136,7 @@ export default function QuizScreen() {
           subjectName = session.subject_name || 'your subject';
         }
       }
+      subjectNameRef.current = subjectName;
 
       if (!context) {
         Alert.alert(
@@ -155,6 +158,19 @@ export default function QuizScreen() {
   }, [quizId, user?.id, chapterIds, sessionId, router]);
 
   useEffect(() => { loadAndGenerate(); }, [loadAndGenerate]);
+
+  useEffect(() => {
+    if (phase !== 'results' || questions.length === 0) return;
+    const wrongOnes = questions
+      .filter((q) => (answers[q.id] ?? '').trim().toLowerCase() !== q.correct_answer.trim().toLowerCase())
+      .map((q) => ({ question: q.question_text, correctAnswer: q.correct_answer, userAnswer: answers[q.id] ?? '' }));
+    if (wrongOnes.length === 0) return;
+    setLoadingExplanations(true);
+    explainWrongAnswers(wrongOnes, subjectNameRef.current)
+      .then(setExplanations)
+      .finally(() => setLoadingExplanations(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
 
   const currentQuestion = questions[currentIdx];
 
@@ -224,68 +240,108 @@ export default function QuizScreen() {
   // ── Results ────────────────────────────────────────────────
   if (phase === 'results' && results) {
     const pct = Math.round((results.correct / results.total) * 100);
+    const hasWrong = results.correct < results.total;
     return (
-      <View
-        style={{
-          flex: 1,
-          backgroundColor: colors.bg.primary,
-          paddingTop: insets.top + spacing.xl,
-          paddingBottom: insets.bottom + spacing.xl,
-          paddingHorizontal: spacing.md,
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: spacing.xl,
-        }}
-      >
-        <Text style={{ fontSize: 64 }}>{results.passed ? '🎉' : '📚'}</Text>
+      <View style={{ flex: 1, backgroundColor: colors.bg.primary }}>
+        <ScrollView
+          contentContainerStyle={{
+            paddingTop: insets.top + spacing.xl,
+            paddingBottom: spacing.lg,
+            paddingHorizontal: spacing.md,
+            alignItems: 'center',
+            gap: spacing.xl,
+          }}
+          showsVerticalScrollIndicator={false}
+        >
+          <Text style={{ fontSize: 64 }}>{results.passed ? '🎉' : '📚'}</Text>
 
-        <View style={{ alignItems: 'center', gap: spacing.xs }}>
-          <Text
-            style={{
-              color: results.passed ? colors.status.success : colors.status.error,
-              fontSize: typography.sizes.xs,
-              fontWeight: typography.weights.semibold,
-              textTransform: 'uppercase',
-              letterSpacing: typography.tracking.widest,
-            }}
-          >
-            {results.passed ? 'Quiz Passed!' : 'Quiz Failed'}
-          </Text>
-          <Text
-            style={{
-              color: colors.text.primary,
-              fontSize: typography.sizes.display,
-              fontWeight: typography.weights.heavy,
-            }}
-          >
-            {pct}%
-          </Text>
-          <Text style={{ color: colors.text.secondary, fontSize: typography.sizes.sm }}>
-            {results.correct}/{results.total} correct · pass mark 60%
-          </Text>
-        </View>
-
-        {results.passed && (
-          <Card variant="glow" padding={spacing.md}>
+          <View style={{ alignItems: 'center', gap: spacing.xs }}>
             <Text
               style={{
-                color: colors.cosmic.purpleLight,
+                color: results.passed ? colors.status.success : colors.status.error,
                 fontSize: typography.sizes.xs,
                 fontWeight: typography.weights.semibold,
-                textAlign: 'center',
+                textTransform: 'uppercase',
+                letterSpacing: typography.tracking.widest,
               }}
             >
-              Quiz bonus applied — higher rarity chance on your reward!
+              {results.passed ? 'Quiz Passed!' : 'Quiz Failed'}
             </Text>
-          </Card>
-        )}
+            <Text
+              style={{
+                color: colors.text.primary,
+                fontSize: typography.sizes.display,
+                fontWeight: typography.weights.heavy,
+              }}
+            >
+              {pct}%
+            </Text>
+            <Text style={{ color: colors.text.secondary, fontSize: typography.sizes.sm }}>
+              {results.correct}/{results.total} correct · pass mark 60%
+            </Text>
+          </View>
 
-        <Button
-          label="Claim Reward"
-          onPress={navigateToReward}
-          size="lg"
-          fullWidth
-        />
+          {results.passed && (
+            <Card variant="glow" padding={spacing.md}>
+              <Text
+                style={{
+                  color: colors.cosmic.purpleLight,
+                  fontSize: typography.sizes.xs,
+                  fontWeight: typography.weights.semibold,
+                  textAlign: 'center',
+                }}
+              >
+                Quiz bonus applied — higher rarity chance on your reward!
+              </Text>
+            </Card>
+          )}
+
+          {hasWrong && (
+            <View style={{ width: '100%', gap: spacing.sm }}>
+              <Text
+                style={{
+                  color: colors.text.secondary,
+                  fontSize: typography.sizes.xs,
+                  fontWeight: typography.weights.semibold,
+                  textTransform: 'uppercase',
+                  letterSpacing: typography.tracking.widest,
+                }}
+              >
+                What to review
+              </Text>
+              {loadingExplanations ? (
+                <ActivityIndicator color={colors.cosmic.purpleLight} />
+              ) : (
+                explanations.map((e, i) => (
+                  <Card key={i} variant="flat" padding={spacing.md}>
+                    <Text
+                      style={{
+                        color: colors.text.secondary,
+                        fontSize: typography.sizes.xs,
+                        fontWeight: typography.weights.semibold,
+                        marginBottom: 4,
+                      }}
+                    >
+                      {e.question}
+                    </Text>
+                    <Text style={{ color: colors.text.primary, fontSize: typography.sizes.sm, lineHeight: 20 }}>
+                      {e.explanation}
+                    </Text>
+                  </Card>
+                ))
+              )}
+            </View>
+          )}
+        </ScrollView>
+
+        <View style={{ paddingHorizontal: spacing.md, paddingBottom: insets.bottom + spacing.md }}>
+          <Button
+            label="Claim Reward"
+            onPress={navigateToReward}
+            size="lg"
+            fullWidth
+          />
+        </View>
       </View>
     );
   }
