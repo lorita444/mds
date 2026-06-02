@@ -1510,11 +1510,21 @@ app.post('/api/ollama/chat', async (req, res) => {
 });
 
 // Start Express Server
-db.initializeDatabase().then(() => {
-  app.listen(PORT, () => {
-    console.log(`StudyVerse local MySQL backend running on http://localhost:${PORT}`);
+if (process.env.NODE_ENV !== 'test') {
+  db.initializeDatabase().then(() => {
+    app.listen(PORT, () => {
+      console.log(`StudyVerse local MySQL backend running on http://localhost:${PORT}`);
+    });
+  }).catch(err => {
+    console.error('Failed to initialize database schema, server shutting down...', err);
+    process.exit(1);
   });
-}).catch(err => {
-  console.error('Failed to initialize database schema, server shutting down...', err);
-  process.exit(1);
-});
+}
+
+// Attach helpers for unit testing
+app.mapBools = mapBools;
+app.mapBoolsArray = mapBoolsArray;
+app.generateUUID = generateUUID;
+app.authenticateToken = authenticateToken;
+
+module.exports = app;

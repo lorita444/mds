@@ -228,7 +228,7 @@ export default function SignupScreen() {
           <View style={styles.starterKit}>
             <Text style={styles.starterTitle}>Your Starter Kit</Text>
             <Text style={styles.starterBody}>
-              You'll receive a starter planet, a companion alien, and 50 crystals to begin building your universe.
+              {"You'll receive a starter planet, a companion alien, and 50 crystals to begin building your universe."}
             </Text>
           </View>
 

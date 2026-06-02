@@ -1,0 +1,60 @@
+name: CI Verification
+
+on:
+  push:
+    branches:
+      - '*' # Rulează pe orice branch la push
+  pull_request:
+    branches:
+      - '*' # Rulează pe orice branch la pull request
+
+jobs:
+  backend-tests:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: backend
+        run: npm ci # Mai rapid și sigur pentru CI
+
+      - name: Run Jest tests
+        working-directory: backend
+        run: npm test
+
+  frontend-checks:
+    name: Frontend Lint & Type Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: focus/package-lock.json
+
+      - name: Install dependencies
+        working-directory: focus
+        run: npm ci # Mai rapid și sigur pentru CI
+
+      - name: Run ESLint
+        working-directory: focus
+        run: npm run lint
+
+      - name: Run TypeScript type-check
+        working-directory: focus
+        run: npm run type-check
