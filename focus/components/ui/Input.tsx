@@ -73,8 +73,14 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
           {...props}
         />
         {secure && (
-          <Pressable onPress={() => setShowSecret(!showSecret)} hitSlop={8}>
-            <Text style={{ color: colors.text.muted, fontSize: typography.sizes.sm }}>
+          <Pressable
+            onPress={() => setShowSecret(!showSecret)}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel={showSecret ? 'Hide password' : 'Show password'}
+            style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, paddingLeft: spacing.sm })}
+          >
+            <Text style={{ color: colors.text.accent, fontSize: typography.sizes.sm, fontWeight: typography.weights.medium }}>
               {showSecret ? 'Hide' : 'Show'}
             </Text>
           </Pressable>

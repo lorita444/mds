@@ -102,7 +102,9 @@ export function Modal({
                   <Pressable
                     onPress={onClose}
                     hitSlop={12}
-                    style={{
+                    accessibilityRole="button"
+                    accessibilityLabel="Close"
+                    style={({ pressed }) => ({
                       backgroundColor: colors.bg.card,
                       borderWidth: 1,
                       borderColor: colors.bg.cardBorder,
@@ -111,7 +113,9 @@ export function Modal({
                       height: 34,
                       alignItems: 'center',
                       justifyContent: 'center',
-                    }}
+                      opacity: pressed ? 0.6 : 1,
+                      transform: [{ scale: pressed ? 0.92 : 1 }],
+                    })}
                   >
                     <Text style={{ color: colors.text.secondary, fontSize: 18, lineHeight: 20 }}>
                       ×

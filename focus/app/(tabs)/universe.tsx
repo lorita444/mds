@@ -220,7 +220,7 @@ export default function UniverseScreen() {
                 </View>
 
                 {multiplier > 1.0 && (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs, backgroundColor: 'rgba(245,158,11,0.12)', borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: 6, borderWidth: 1, borderColor: 'rgba(245,158,11,0.3)' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs, backgroundColor: colors.status.warningFaint, borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: 6, borderWidth: 1, borderColor: 'rgba(245,158,11,0.3)' }}>
                     <Text style={{ color: colors.cosmic.goldLight, fontSize: 13 }}>⚡</Text>
                     <Text style={{ color: colors.cosmic.goldLight, fontSize: typography.sizes.xs, fontWeight: typography.weights.bold }}>
                       {multiplier.toFixed(1)}x Boost Active
@@ -231,6 +231,8 @@ export default function UniverseScreen() {
                 {/* Primary CTA */}
                 <Pressable
                   onPress={() => setShowMissionModal(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Start mission"
                   style={({ pressed }) => ({
                     width: '100%',
                     backgroundColor: pressed ? 'rgba(124,58,237,0.38)' : 'rgba(124,58,237,0.2)',

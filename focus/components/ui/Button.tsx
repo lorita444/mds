@@ -112,6 +112,8 @@ export function Button({
     <Pressable
       disabled={isDisabled}
       accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: !!isDisabled, busy: loading }}
       style={({ pressed }) => [
         {
           backgroundColor: v.bg,
@@ -127,8 +129,8 @@ export function Button({
           flexDirection: 'row' as const,
           gap: spacing.sm,
           alignSelf: fullWidth ? ('stretch' as const) : ('auto' as const),
-          opacity: isDisabled ? 0.45 : 1,
-          transform: [{ translateY: pressed && !isDisabled ? 1 : 0 }],
+          opacity: isDisabled ? 0.45 : pressed ? 0.92 : 1,
+          transform: [{ scale: pressed && !isDisabled ? 0.98 : 1 }, { translateY: pressed && !isDisabled ? 1 : 0 }],
           // Glow shadow (only when not disabled, not pressed)
           ...(v.shadow && !isDisabled && !pressed ? v.shadow : {}),
         },

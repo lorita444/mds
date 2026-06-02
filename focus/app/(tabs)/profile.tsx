@@ -448,41 +448,63 @@ export default function ProfileScreen() {
         >
           Settings
         </Text>
-        {[
-          { icon: '🔔', label: 'Notifications', action: () => {} },
-          { icon: '🎨', label: 'Appearance', action: () => {} },
-          { icon: '🔒', label: 'Privacy', action: () => {} },
-          { icon: '❓', label: 'Help & Support', action: () => {} },
-        ].map((item) => (
-          <Pressable
-            key={item.label}
-            onPress={item.action}
-            style={({ pressed }) => ({
-              backgroundColor: colors.bg.card,
-              borderWidth: 1,
-              borderColor: colors.bg.cardBorder,
-              borderRadius: radius.lg,
-              padding: spacing.md,
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: spacing.md,
-              opacity: pressed ? 0.75 : 1,
-            })}
-          >
-            <Text style={{ fontSize: 20 }}>{item.icon}</Text>
-            <Text
-              style={{
-                flex: 1,
-                color: colors.text.primary,
-                fontSize: typography.sizes.base,
-                fontWeight: typography.weights.medium,
-              }}
+        <View
+          style={{
+            backgroundColor: colors.bg.card,
+            borderWidth: 1,
+            borderColor: colors.bg.cardBorder,
+            borderRadius: radius.lg,
+            overflow: 'hidden',
+          }}
+        >
+          {[
+            { icon: '🔔', label: 'Notifications', tint: colors.cosmic.purple, action: () => {} },
+            { icon: '🎨', label: 'Appearance', tint: colors.cosmic.pink, action: () => {} },
+            { icon: '🔒', label: 'Privacy', tint: colors.cosmic.teal, action: () => {} },
+            { icon: '❓', label: 'Help & Support', tint: colors.cosmic.blue, action: () => {} },
+          ].map((item, i, arr) => (
+            <Pressable
+              key={item.label}
+              onPress={item.action}
+              accessibilityRole="button"
+              accessibilityLabel={item.label}
+              style={({ pressed }) => ({
+                backgroundColor: pressed ? colors.bg.elevated : 'transparent',
+                borderTopWidth: i === 0 ? 0 : 1,
+                borderTopColor: colors.bg.cardBorder,
+                paddingVertical: spacing.md - 2,
+                paddingHorizontal: spacing.md,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: spacing.md,
+              })}
             >
-              {item.label}
-            </Text>
-            <Text style={{ color: colors.text.muted, fontSize: 16 }}>›</Text>
-          </Pressable>
-        ))}
+              <View
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: radius.md,
+                  backgroundColor: `${item.tint}22`,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Text style={{ fontSize: typography.sizes.md }}>{item.icon}</Text>
+              </View>
+              <Text
+                style={{
+                  flex: 1,
+                  color: colors.text.primary,
+                  fontSize: typography.sizes.base,
+                  fontWeight: typography.weights.medium,
+                }}
+              >
+                {item.label}
+              </Text>
+              <Text style={{ color: colors.text.muted, fontSize: typography.sizes.lg, fontWeight: typography.weights.medium }}>›</Text>
+            </Pressable>
+          ))}
+        </View>
       </View>
 
       {/* Sign out */}
