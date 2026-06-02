@@ -793,7 +793,7 @@ export default function CoopRoomScreen() {
                     lineHeight: 18,
                   }}
                 >
-                  🚀 Trimite codul camerei prietenilor tăi. Ei trebuie să apese "Sunt Pregătit!" înainte de a da startul.
+                  {"🚀 Trimite codul camerei prietenilor tăi. Ei trebuie să apese \"Sunt Pregătit!\" înainte de a da startul."}
                 </Text>
               </Card>
             )}

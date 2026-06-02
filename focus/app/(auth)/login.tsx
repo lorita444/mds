@@ -153,7 +153,7 @@ export default function LoginScreen() {
               <>
                 <Text style={styles.title}>Reset password</Text>
                 <Text style={styles.subtitle}>
-                  We'll send a reset link to your email
+                  {"We'll send a reset link to your email"}
                 </Text>
               </>
             )}
@@ -272,7 +272,7 @@ export default function LoginScreen() {
             <View style={styles.successCard}>
               <Text style={styles.successIcon}>✉</Text>
               <Text style={styles.successBody}>
-                A password reset link has been sent. Check your spam folder if you don't see it within a minute.
+                {"A password reset link has been sent. Check your spam folder if you don't see it within a minute."}
               </Text>
               <Button
                 label="Back to Sign In"
