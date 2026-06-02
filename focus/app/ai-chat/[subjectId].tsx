@@ -69,7 +69,7 @@ export default function AIChatScreen() {
       setSubjectName(subjectRes?.name ?? 'Subject');
       chaptersRef.current = chapters;
       summariesRef.current = materials
-        .map((m) => m.summary)
+        .map((m) => m.content_text ?? m.summary)
         .filter(Boolean) as string[];
     } finally {
       setLoading(false);

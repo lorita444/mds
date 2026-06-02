@@ -65,6 +65,7 @@ export type Material = {
   file_type: string;
   size_bytes: number;
   summary: string | null;
+  content_text: string | null;
   is_summarized: boolean;
   embedding_done: boolean;
   created_at: string;

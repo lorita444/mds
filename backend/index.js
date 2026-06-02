@@ -3,15 +3,59 @@ const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { crypto } = require('crypto'); // Built-in Node.js crypto
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
+const { PDFParse } = require('pdf-parse');
 const db = require('./db');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'studyverse_secret_key_2026';
 
+// Uploaded material files live on disk under backend/uploads/
+const UPLOAD_DIR = path.join(__dirname, 'uploads');
+fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, UPLOAD_DIR),
+  filename: (req, file, cb) => {
+    const safe = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+    cb(null, `${require('crypto').randomUUID()}_${safe}`);
+  },
+});
+const upload = multer({ storage, limits: { fileSize: 50 * 1024 * 1024 } }); // 50MB cap
+
+// Extract plain text from an uploaded file (PDF or text-based). Returns '' on failure.
+async function extractText(filePath, mimeType, originalName) {
+  try {
+    const lower = (originalName || '').toLowerCase();
+    if (mimeType === 'application/pdf' || lower.endsWith('.pdf')) {
+      const buf = fs.readFileSync(filePath);
+      const parser = new PDFParse({ data: buf });
+      try {
+        const result = await parser.getText();
+        return (result.text || '').trim();
+      } finally {
+        await parser.destroy();
+      }
+    }
+    if ((mimeType && mimeType.startsWith('text/')) || /\.(txt|md|csv|json)$/.test(lower)) {
+      return fs.readFileSync(filePath, 'utf-8').trim();
+    }
+    // Unsupported type (e.g. docx) — store nothing extracted for now.
+    return '';
+  } catch (err) {
+    console.error('[extractText] failed:', err.message);
+    return '';
+  }
+}
+
 app.use(cors());
 app.use(express.json());
+
+// Serve uploaded files statically at /uploads/<filename>
+app.use('/uploads', express.static(UPLOAD_DIR));
 
 // Helper to generate UUIDs
 function generateUUID() {
@@ -375,6 +419,41 @@ app.post('/api/materials', async (req, res) => {
   }
 });
 
+// Multipart upload: saves file to disk, extracts text, creates material row
+app.post('/api/materials/upload', upload.single('file'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No file uploaded' });
+  }
+  const { subject_id, chapter_id, user_id, name } = req.body;
+  if (!subject_id || !user_id) {
+    fs.unlink(req.file.path, () => {});
+    return res.status(400).json({ error: 'subject_id and user_id are required' });
+  }
+
+  const id = generateUUID();
+  const fileUrl = `/uploads/${req.file.filename}`;
+  try {
+    const contentText = await extractText(req.file.path, req.file.mimetype, req.file.originalname);
+
+    await db.query(
+      `INSERT INTO materials (id, subject_id, chapter_id, user_id, name, file_url, file_type, size_bytes, content_text, is_summarized, embedding_done)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)`,
+      [
+        id, subject_id, chapter_id || null, user_id,
+        name || req.file.originalname, fileUrl,
+        req.file.mimetype || 'application/octet-stream',
+        req.file.size || 0,
+        contentText || null,
+      ]
+    );
+    const material = await db.querySingle('SELECT * FROM materials WHERE id = ?', [id]);
+    res.json(mapBools(material, ['is_summarized', 'embedding_done']));
+  } catch (error) {
+    fs.unlink(req.file.path, () => {}); // roll back orphaned file
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.put('/api/materials/:id/summary', async (req, res) => {
   const { summary } = req.body;
   try {
@@ -399,7 +478,13 @@ app.put('/api/materials/:id/embedded', async (req, res) => {
 
 app.delete('/api/materials/:id', async (req, res) => {
   try {
+    const material = await db.querySingle('SELECT file_url FROM materials WHERE id = ?', [req.params.id]);
     await db.query('DELETE FROM materials WHERE id = ?', [req.params.id]);
+    // Remove the file from disk if it lives in our uploads dir
+    if (material && material.file_url && material.file_url.startsWith('/uploads/')) {
+      const diskPath = path.join(UPLOAD_DIR, path.basename(material.file_url));
+      fs.unlink(diskPath, () => {});
+    }
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -833,7 +918,6 @@ app.post('/api/flashcards', async (req, res) => {
     const createdCards = [];
     for (const card of cards) {
       const id = generateUUID();
-      console.log('[FLASHCARD INSERT]', JSON.stringify(card, null, 2));
       await db.query(
         `INSERT INTO flashcards (id, subject_id, chapter_id, user_id, question, answer, difficulty, review_status)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -1504,7 +1588,6 @@ app.post('/api/ollama/chat', async (req, res) => {
       return res.status(r.status).json({ error: text });
     }
     const data = await r.json();
-    console.log('[OLLAMA CHAT RESPONSE]', JSON.stringify(data?.message?.content ?? data, null, 2));
     res.json(data);
   } catch (err) {
     res.status(503).json({ error: `Ollama unreachable: ${err.message}` });

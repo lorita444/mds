@@ -281,9 +281,9 @@ export default function FlashcardsScreen() {
         return;
       }
 
-      // Use material summaries as context
+      // Prefer extracted file text, fall back to AI summary, then name
       const context = materials
-        .map((m) => m.summary ?? m.name)
+        .map((m) => m.content_text ?? m.summary ?? m.name)
         .join('\n\n---\n\n');
 
       const chapter = selectedChapterId

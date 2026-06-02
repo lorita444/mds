@@ -94,6 +94,7 @@ async function initializeDatabase() {
         file_type VARCHAR(100) NOT NULL,
         size_bytes BIGINT NOT NULL DEFAULT 0,
         summary TEXT NULL,
+        content_text LONGTEXT NULL,
         is_summarized TINYINT(1) NOT NULL DEFAULT 0,
         embedding_done TINYINT(1) NOT NULL DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -338,6 +339,7 @@ async function initializeDatabase() {
       "ALTER TABLE coop_rooms ADD COLUMN is_paused TINYINT(1) NOT NULL DEFAULT 0",
       "ALTER TABLE coop_rooms ADD COLUMN paused_at TIMESTAMP NULL DEFAULT NULL",
       "ALTER TABLE coop_rooms ADD COLUMN paused_seconds INT NOT NULL DEFAULT 0",
+      "ALTER TABLE materials ADD COLUMN content_text LONGTEXT NULL",
     ];
     for (const sql of alterMigrations) {
       try {

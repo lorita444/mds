@@ -19,9 +19,8 @@ import {
   getMaterials,
   createChapter,
   deleteChapter,
-  createMaterial,
   deleteMaterial,
-  uploadMaterial,
+  uploadMaterialFile,
   deleteMaterialFile,
 } from '../../lib/db';
 import { toast } from '../../store/useAppStore';
@@ -177,25 +176,13 @@ export default function SubjectDetailScreen() {
       const file = result.assets[0];
       setUploading(true);
 
-      const response = await fetch(file.uri);
-      const blob = await response.blob();
-
-      const url = await uploadMaterial(
-        user.id,
-        id,
-        file.name,
-        blob,
-        file.mimeType ?? 'application/octet-stream',
-      );
-
-      const material = await createMaterial({
-        subject_id: id,
-        chapter_id: chapterId,
-        user_id: user.id,
-        name: file.name,
-        file_url: url,
-        file_type: file.mimeType ?? 'unknown',
-        size_bytes: file.size ?? blob.size,
+      const material = await uploadMaterialFile({
+        userId: user.id,
+        subjectId: id,
+        chapterId,
+        fileUri: file.uri,
+        fileName: file.name,
+        mimeType: file.mimeType ?? 'application/octet-stream',
       });
 
       if (material) {

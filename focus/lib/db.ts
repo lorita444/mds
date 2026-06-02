@@ -228,24 +228,46 @@ export async function deleteMaterial(id: string): Promise<void> {
   });
 }
 
-// ── STORAGE (mocked locally) ─────────────────────────────────
+// ── STORAGE (real, on backend disk) ──────────────────────────
 
-export async function uploadMaterial(
-  userId: string,
-  subjectId: string,
-  fileName: string,
-  fileBlob: Blob,
-  mimeType: string,
-): Promise<string> {
-  // Returns a simulated local path or file URL.
-  // In Expo local mode, files can reside in local state or app assets.
-  const randomId = Math.random().toString(36).substring(7);
-  return `file://local_documents/${userId}/${subjectId}/${randomId}_${fileName}`;
+// Uploads the actual file to the backend, which saves it to disk,
+// extracts its text, and creates the material row. Returns the Material.
+export async function uploadMaterialFile(payload: {
+  userId: string;
+  subjectId: string;
+  chapterId: string | null;
+  fileUri: string;
+  fileName: string;
+  mimeType: string;
+}): Promise<Material> {
+  const token = await AsyncStorage.getItem('auth_token');
+  const form = new FormData();
+  form.append('subject_id', payload.subjectId);
+  form.append('user_id', payload.userId);
+  if (payload.chapterId) form.append('chapter_id', payload.chapterId);
+  form.append('name', payload.fileName);
+  // React Native FormData file part
+  form.append('file', {
+    uri: payload.fileUri,
+    name: payload.fileName,
+    type: payload.mimeType,
+  } as any);
+
+  const response = await fetch(`${API_URL}/materials/upload`, {
+    method: 'POST',
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: form,
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || `Upload failed: ${response.statusText}`);
+  }
+  return response.json();
 }
 
 export async function deleteMaterialFile(fileUrl: string): Promise<void> {
-  // Mock delete local file. No cloud operations needed.
-  console.log(`Mock deleted local material file: ${fileUrl}`);
+  // File deletion is handled server-side when the material row is deleted.
+  console.log(`Material file deletion handled by backend: ${fileUrl}`);
 }
 
 // ── STUDY SESSIONS ───────────────────────────────────────────
