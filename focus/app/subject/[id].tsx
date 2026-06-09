@@ -23,6 +23,7 @@ import {
   deleteMaterial,
   uploadMaterial,
   deleteMaterialFile,
+  summarizeMaterialWithCodex,
 } from '../../lib/db';
 import { toast } from '../../store/useAppStore';
 import { colors, spacing, typography, radius } from '../../utils/theme';
@@ -85,6 +86,7 @@ export default function SubjectDetailScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [summarizingMaterialIds, setSummarizingMaterialIds] = useState<Set<string>>(() => new Set());
 
   // Chapter modal
   const [showAddChapter, setShowAddChapter] = useState(false);
@@ -115,6 +117,37 @@ export default function SubjectDetailScreen() {
   );
 
   useEffect(() => { load(false); }, [load]);
+
+  const summarizeUploadedMaterial = useCallback(
+    async (
+      material: Material,
+      file: DocumentPicker.DocumentPickerAsset,
+      blob: Blob,
+    ) => {
+      setSummarizingMaterialIds((prev) => new Set(prev).add(material.id));
+      try {
+        const summarized = await summarizeMaterialWithCodex(material.id, file);
+        setMaterials((prev) =>
+          prev.map((m) =>
+            m.id === material.id
+              ? summarized
+              : m,
+          ),
+        );
+        toast(`"${material.name}" summarized`, 'success');
+      } catch (e) {
+        const message = e instanceof Error ? e.message : 'Summarization failed';
+        toast(`${material.name}: ${message}`, 'error');
+      } finally {
+        setSummarizingMaterialIds((prev) => {
+          const next = new Set(prev);
+          next.delete(material.id);
+          return next;
+        });
+      }
+    },
+    [subject?.name],
+  );
 
   const handleAddChapter = async () => {
     if (!newChapterName.trim()) { setChapterNameError('Chapter name required'); return; }
@@ -200,7 +233,8 @@ export default function SubjectDetailScreen() {
 
       if (material) {
         setMaterials((prev) => [...prev, material]);
-        toast(`"${file.name}" uploaded`, 'success');
+        toast(`"${file.name}" uploaded. Summarizing...`, 'success');
+        void summarizeUploadedMaterial(material, file, blob);
       }
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Upload failed', 'error');
@@ -419,7 +453,12 @@ export default function SubjectDetailScreen() {
                       </Text>
                     ) : (
                       chapterMaterials.map((m) => (
-                        <MaterialRow key={m.id} material={m} onDelete={() => handleDeleteMaterial(m)} />
+                        <MaterialRow
+                          key={m.id}
+                          material={m}
+                          summarizing={summarizingMaterialIds.has(m.id)}
+                          onDelete={() => handleDeleteMaterial(m)}
+                        />
                       ))
                     )}
                   </View>
@@ -474,7 +513,12 @@ export default function SubjectDetailScreen() {
               </Card>
             ) : (
               unassignedMaterials.map((m) => (
-                <MaterialRow key={m.id} material={m} onDelete={() => handleDeleteMaterial(m)} />
+                <MaterialRow
+                  key={m.id}
+                  material={m}
+                  summarizing={summarizingMaterialIds.has(m.id)}
+                  onDelete={() => handleDeleteMaterial(m)}
+                />
               ))
             )}
           </View>
@@ -520,7 +564,15 @@ export default function SubjectDetailScreen() {
   );
 }
 
-function MaterialRow({ material, onDelete }: { material: Material; onDelete: () => void }) {
+function MaterialRow({
+  material,
+  summarizing,
+  onDelete,
+}: {
+  material: Material;
+  summarizing?: boolean;
+  onDelete: () => void;
+}) {
   const icon = material.file_type.includes('pdf')
     ? '📄'
     : material.file_type.includes('text') || material.file_type.includes('word')
@@ -551,6 +603,20 @@ function MaterialRow({ material, onDelete }: { material: Material; onDelete: () 
           <Text style={{ color: colors.text.muted, fontSize: typography.sizes.xs }}>
             {formatBytes(material.size_bytes)}
           </Text>
+          {summarizing && (
+            <View
+              style={{
+                backgroundColor: colors.cosmic.purpleFaint,
+                borderRadius: radius.full,
+                paddingHorizontal: 6,
+                paddingVertical: 1,
+              }}
+            >
+              <Text style={{ color: colors.cosmic.purpleLight, fontSize: 10, fontWeight: '600' }}>
+                Summarizing...
+              </Text>
+            </View>
+          )}
           {material.is_summarized && (
             <View
               style={{

@@ -13,15 +13,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/auth-context';
 import {
   getFlashcards,
-  createFlashcards,
+  generateFlashcardsAI,
   updateFlashcardStatus,
   deleteFlashcard,
   getChapters,
-  getMaterials,
   getSubject,
 } from '../../lib/db';
-import { generateFlashcardsFromText } from '../../lib/ollama';
-import { supabase } from '../../lib/supabase';
 import { colors, spacing, typography, radius } from '../../utils/theme';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -258,49 +255,16 @@ export default function FlashcardsScreen() {
 
   const handleGenerate = async () => {
     if (!subjectId || !user?.id) return;
+    console.log('[Flashcards] handleGenerate called', { subjectId, selectedChapterId, userId: user.id });
     setGenerating(true);
     setShowGenerateModal(false);
     try {
-      // Get materials text (use summaries or first chunk of content)
-      const materials = selectedChapterId
-        ? await getMaterials(subjectId).then((ms) => ms.filter((m) => m.chapter_id === selectedChapterId))
-        : await getMaterials(subjectId);
-
-      if (materials.length === 0) {
-        Alert.alert('No materials', 'Upload materials first to generate flashcards from them.');
-        return;
-      }
-
-      // Use material summaries as context
-      const context = materials
-        .map((m) => m.summary ?? m.name)
-        .join('\n\n---\n\n');
-
-      const chapter = selectedChapterId
-        ? chapters.find((c) => c.id === selectedChapterId)?.name
-        : undefined;
-
-      const generated = await generateFlashcardsFromText(
-        context,
-        subjectName,
-        chapter,
-        10,
-      );
-
-      const toSave = generated.map((g) => ({
-        subject_id: subjectId,
-        chapter_id: selectedChapterId,
-        user_id: user.id,
-        question: g.question,
-        answer: g.answer,
-        difficulty: g.difficulty,
-        review_status: 'new' as const,
-      }));
-
-      const saved = await createFlashcards(toSave);
+      const saved = await generateFlashcardsAI(subjectId, selectedChapterId, 10);
+      console.log('[Flashcards] Generated successfully:', saved?.length, 'cards');
       setCards((prev) => [...saved, ...prev]);
       Alert.alert('Done', `${saved.length} flashcards generated!`);
     } catch (e) {
+      console.error('[Flashcards] Generation error:', e);
       Alert.alert('Generation failed', e instanceof Error ? e.message : 'Could not generate flashcards');
     } finally {
       setGenerating(false);

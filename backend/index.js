@@ -3,12 +3,18 @@ const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const multer = require('multer');
+const pdfParse = require('pdf-parse');
 const { crypto } = require('crypto'); // Built-in Node.js crypto
 const db = require('./db');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'studyverse_secret_key_2026';
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024 },
+});
 
 app.use(cors());
 app.use(express.json());
@@ -375,15 +381,324 @@ app.post('/api/materials', async (req, res) => {
   }
 });
 
-app.put('/api/materials/:id/summary', async (req, res) => {
-  const { summary } = req.body;
+app.post('/api/materials/extract-text', upload.single('file'), async (req, res) => {
   try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const mimeType = req.file.mimetype || '';
+    const fileName = req.file.originalname || 'uploaded file';
+    let text = '';
+
+    console.log('[SUMMARIZE] EXTRACT START', {
+      name: fileName,
+      mimeType,
+      size: req.file.size,
+      at: new Date().toISOString(),
+    });
+
+    if (mimeType.includes('pdf') || fileName.toLowerCase().endsWith('.pdf')) {
+      const parsed = await pdfParse(req.file.buffer);
+      text = parsed.text || '';
+    } else if (
+      mimeType.includes('text') ||
+      fileName.toLowerCase().endsWith('.txt') ||
+      fileName.toLowerCase().endsWith('.md')
+    ) {
+      text = req.file.buffer.toString('utf8');
+    } else {
+      return res.status(400).json({
+        error: 'Unsupported file type for text extraction. Upload a text-based PDF or TXT/MD file.',
+      });
+    }
+
+    const cleaned = text
+      .replace(/\0/g, ' ')
+      .replace(/[ \t]+/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+
+    if (cleaned.replace(/\s/g, '').length < 200) {
+      return res.status(400).json({
+        error: 'Could not extract enough readable text from this file.',
+      });
+    }
+
+    console.log('[SUMMARIZE] EXTRACT FINISH', {
+      name: fileName,
+      mimeType,
+      textLength: cleaned.length,
+      at: new Date().toISOString(),
+    });
+
+    res.json({ text: cleaned, length: cleaned.length });
+  } catch (error) {
+    console.error('[SUMMARIZE] EXTRACT error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/materials/:id/summarize-file', upload.single('file'), async (req, res) => {
+  const materialId = req.params.id;
+
+  try {
+    const material = await db.querySingle(
+      `SELECT m.id, m.name, m.subject_id, m.chapter_id, m.user_id, s.name AS subject_name
+       FROM materials m
+       LEFT JOIN subjects s ON s.id = m.subject_id
+       WHERE m.id = ?`,
+      [materialId]
+    );
+
+    if (!material) {
+      console.warn('[SUMMARIZE] START failed: material not found', { materialId });
+      return res.status(404).json({ error: 'Material not found' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const mimeType = req.file.mimetype || '';
+    const fileName = req.file.originalname || material.name || 'uploaded file';
+    let text = '';
+
+    console.log('[SUMMARIZE] START', {
+      materialId: material.id,
+      name: material.name,
+      subjectId: material.subject_id,
+      chapterId: material.chapter_id,
+      userId: material.user_id,
+      provider: 'codex-local',
+      at: new Date().toISOString(),
+    });
+
+    console.log('[SUMMARIZE] EXTRACT START', {
+      materialId: material.id,
+      name: fileName,
+      mimeType,
+      size: req.file.size,
+      at: new Date().toISOString(),
+    });
+
+    if (mimeType.includes('pdf') || fileName.toLowerCase().endsWith('.pdf')) {
+      const parsed = await pdfParse(req.file.buffer);
+      text = parsed.text || '';
+    } else if (
+      mimeType.includes('text') ||
+      fileName.toLowerCase().endsWith('.txt') ||
+      fileName.toLowerCase().endsWith('.md')
+    ) {
+      text = req.file.buffer.toString('utf8');
+    } else {
+      throw new Error('Unsupported file type for summarization. Upload a text-based PDF or TXT/MD file.');
+    }
+
+    const cleaned = text
+      .replace(/\0/g, ' ')
+      .replace(/[ \t]+/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+
+    if (cleaned.replace(/\s/g, '').length < 200) {
+      throw new Error('Could not extract enough readable text from this file.');
+    }
+
+    console.log('[SUMMARIZE] EXTRACT FINISH', {
+      materialId: material.id,
+      name: fileName,
+      mimeType,
+      textLength: cleaned.length,
+      at: new Date().toISOString(),
+    });
+
+    const summarySchema = {
+      type: 'object',
+      properties: {
+        summary: { type: 'string' },
+      },
+      required: ['summary'],
+      additionalProperties: false,
+    };
+
+    const prompt = `Ești un asistent de studiu concis pentru materia "${material.subject_name || 'Subject'}".
+Rezuma materialul de mai jos clar, în aceeași limbă ca materialul.
+Concentrează-te pe concepte cheie, definiții, relații și pași importanți.
+Nu include introduceri de umplutură.
+Răspunde strict în JSON cu cheia "summary".
+
+Material:
+${cleaned.slice(0, 12000)}`;
+
+    console.log('[SUMMARIZE] CODEX START', {
+      materialId: material.id,
+      promptLength: prompt.length,
+      at: new Date().toISOString(),
+    });
+
+    const { Codex } = await import('@openai/codex-sdk');
+    const codex = new Codex();
+    const thread = codex.startThread({ skipGitRepoCheck: true });
+    const turn = await thread.run(prompt, { outputSchema: summarySchema });
+
+    const parsed = typeof turn.finalResponse === 'string'
+      ? JSON.parse(turn.finalResponse)
+      : turn.finalResponse;
+    const summary = parsed?.summary;
+
+    if (!summary || typeof summary !== 'string') {
+      throw new Error('Codex returned an invalid summary format.');
+    }
+
+    console.log('[SUMMARIZE] CODEX FINISH', {
+      materialId: material.id,
+      summaryLength: summary.length,
+      at: new Date().toISOString(),
+    });
+
+    console.log('[SUMMARIZE] SAVING', {
+      materialId: material.id,
+      name: material.name,
+      subjectId: material.subject_id,
+      chapterId: material.chapter_id,
+      userId: material.user_id,
+      summaryLength: summary.length,
+      at: new Date().toISOString(),
+    });
+
     await db.query(
       'UPDATE materials SET summary = ?, is_summarized = 1 WHERE id = ?',
-      [summary, req.params.id]
+      [summary, material.id]
     );
+
+    console.log('[SUMMARIZE] FINISH', {
+      materialId: material.id,
+      name: material.name,
+      subjectId: material.subject_id,
+      chapterId: material.chapter_id,
+      userId: material.user_id,
+      provider: 'codex-local',
+      at: new Date().toISOString(),
+    });
+
+    const updated = await db.querySingle('SELECT * FROM materials WHERE id = ?', [material.id]);
+    res.json(mapBools(updated, ['is_summarized', 'embedding_done']));
+  } catch (error) {
+    console.error('[SUMMARIZE] FAILED', {
+      materialId,
+      error: error.message,
+      at: new Date().toISOString(),
+    });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/materials/:id/summarize-start', async (req, res) => {
+  const materialId = req.params.id;
+  try {
+    const material = await db.querySingle(
+      'SELECT id, name, subject_id, chapter_id, user_id FROM materials WHERE id = ?',
+      [materialId]
+    );
+
+    if (!material) {
+      console.warn('[SUMMARIZE] START failed: material not found', { materialId });
+      return res.status(404).json({ error: 'Material not found' });
+    }
+
+    console.log('[SUMMARIZE] START', {
+      materialId: material.id,
+      name: material.name,
+      subjectId: material.subject_id,
+      chapterId: material.chapter_id,
+      userId: material.user_id,
+      at: new Date().toISOString(),
+    });
+
     res.json({ success: true });
   } catch (error) {
+    console.error('[SUMMARIZE] START error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/materials/:id/summarize-failed', async (req, res) => {
+  const materialId = req.params.id;
+  const { error } = req.body || {};
+  try {
+    const material = await db.querySingle(
+      'SELECT id, name, subject_id, chapter_id, user_id FROM materials WHERE id = ?',
+      [materialId]
+    );
+
+    if (!material) {
+      console.warn('[SUMMARIZE] FAILED: material not found', {
+        materialId,
+        error,
+        at: new Date().toISOString(),
+      });
+      return res.status(404).json({ error: 'Material not found' });
+    }
+
+    console.error('[SUMMARIZE] FAILED', {
+      materialId: material.id,
+      name: material.name,
+      subjectId: material.subject_id,
+      chapterId: material.chapter_id,
+      userId: material.user_id,
+      error: error || 'Unknown summarization error',
+      at: new Date().toISOString(),
+    });
+
+    res.json({ success: true });
+  } catch (logError) {
+    console.error('[SUMMARIZE] FAILED log error:', logError.message);
+    res.status(500).json({ error: logError.message });
+  }
+});
+
+app.put('/api/materials/:id/summary', async (req, res) => {
+  const { summary } = req.body;
+  const materialId = req.params.id;
+  try {
+    const material = await db.querySingle(
+      'SELECT id, name, subject_id, chapter_id, user_id FROM materials WHERE id = ?',
+      [materialId]
+    );
+
+    if (!material) {
+      console.warn('[SUMMARIZE] FINISH failed: material not found', { materialId });
+      return res.status(404).json({ error: 'Material not found' });
+    }
+
+    console.log('[SUMMARIZE] SAVING', {
+      materialId: material.id,
+      name: material.name,
+      subjectId: material.subject_id,
+      chapterId: material.chapter_id,
+      userId: material.user_id,
+      summaryLength: typeof summary === 'string' ? summary.length : 0,
+      at: new Date().toISOString(),
+    });
+
+    await db.query(
+      'UPDATE materials SET summary = ?, is_summarized = 1 WHERE id = ?',
+      [summary, materialId]
+    );
+
+    console.log('[SUMMARIZE] FINISH', {
+      materialId: material.id,
+      name: material.name,
+      subjectId: material.subject_id,
+      chapterId: material.chapter_id,
+      userId: material.user_id,
+      at: new Date().toISOString(),
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[SUMMARIZE] FINISH error:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
@@ -843,6 +1158,133 @@ app.post('/api/flashcards', async (req, res) => {
     }
     res.json(createdCards);
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/flashcards/generate', authenticateToken, async (req, res) => {
+  console.log('[GENERATE] Endpoint hit');
+  console.log('[GENERATE] Body:', JSON.stringify(req.body));
+  console.log('[GENERATE] User:', req.user?.id);
+  const userId = req.user.id;
+  const { subjectId, chapterId, count = 10 } = req.body;
+
+  if (!subjectId) {
+    return res.status(400).json({ error: 'subjectId is required' });
+  }
+
+  try {
+    // Fetch subject, chapters, and material summaries from DB
+    console.log('[GENERATE] Fetching subject:', subjectId);
+    const subject = await db.querySingle('SELECT * FROM subjects WHERE id = ?', [subjectId]);
+    if (!subject) {
+      return res.status(404).json({ error: 'Subject not found' });
+    }
+
+    const chapters = await db.query('SELECT id, name, description FROM chapters WHERE subject_id = ? ORDER BY order_index', [subjectId]);
+
+    let materials;
+    if (chapterId) {
+      materials = await db.query('SELECT name, summary FROM materials WHERE subject_id = ? AND chapter_id = ? AND is_summarized = 1', [subjectId, chapterId]);
+    } else {
+      materials = await db.query('SELECT name, summary FROM materials WHERE subject_id = ? AND is_summarized = 1', [subjectId]);
+    }
+
+    console.log('[GENERATE] Found', materials.length, 'materials');
+    if (materials.length === 0) {
+      return res.status(400).json({ error: 'No summarized materials found. Upload and summarize materials first.' });
+    }
+
+    const chapterContext = chapters.length > 0
+      ? `\nCapitole: ${chapters.map(c => c.name).join(', ')}`
+      : '';
+
+    const selectedChapter = chapterId
+      ? chapters.find(c => c.id === chapterId)
+      : null;
+
+    const materialContext = materials
+      .map(m => m.summary || m.name)
+      .join('\n\n---\n\n');
+
+    const prompt = `Ești un profesor expert. Pe baza materialelor de mai jos, generează exact ${count} flashcard-uri pentru subiectul "${subject.name}"${selectedChapter ? ` (capitolul: ${selectedChapter.name})` : ''}.${chapterContext}
+
+Materiale:
+${materialContext}
+
+Reguli:
+- Întrebările trebuie să fie clare și concise
+- Răspunsurile trebuie să fie informative dar scurte (1-3 propoziții)
+- Distribuie dificultatea: ~30% easy, ~50% medium, ~20% hard
+- Acoperă cât mai multe concepte din materiale
+- Limba: aceeași limbă ca materialele`;
+
+    const flashcardSchema = {
+      type: 'object',
+      properties: {
+        flashcards: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              question: { type: 'string' },
+              answer: { type: 'string' },
+              difficulty: { type: 'string', enum: ['easy', 'medium', 'hard'] },
+            },
+            required: ['question', 'answer', 'difficulty'],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ['flashcards'],
+      additionalProperties: false,
+    };
+
+    // Dynamic import for ESM package
+    console.log('[GENERATE] Importing Codex SDK...');
+    const { Codex } = await import('@openai/codex-sdk');
+    console.log('[GENERATE] Creating Codex instance...');
+    const codex = new Codex();
+    const thread = codex.startThread({ skipGitRepoCheck: true });
+
+    console.log('[GENERATE] Sending prompt to Codex (length:', prompt.length, 'chars)...');
+    const turn = await thread.run(prompt, { outputSchema: flashcardSchema });
+    console.log('[GENERATE] Codex responded. finalResponse type:', typeof turn.finalResponse);
+    console.log('[GENERATE] Codex finalResponse:', JSON.stringify(turn.finalResponse)?.substring(0, 500));
+
+    let generated;
+    try {
+      const parsed = typeof turn.finalResponse === 'string'
+        ? JSON.parse(turn.finalResponse)
+        : turn.finalResponse;
+      generated = parsed.flashcards || parsed;
+      console.log('[GENERATE] Parsed', generated?.length, 'flashcards');
+    } catch (parseErr) {
+      console.error('[GENERATE] Codex response parse error:', parseErr, turn.finalResponse);
+      return res.status(500).json({ error: 'AI returned invalid format' });
+    }
+
+    if (!Array.isArray(generated)) {
+      return res.status(500).json({ error: 'AI returned invalid format' });
+    }
+
+    // Save to DB
+    const createdCards = [];
+    for (const card of generated) {
+      const id = generateUUID();
+      await db.query(
+        `INSERT INTO flashcards (id, subject_id, chapter_id, user_id, question, answer, difficulty, review_status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, subjectId, chapterId || null, userId, card.question, card.answer, card.difficulty || 'medium', 'new']
+      );
+      const inserted = await db.querySingle('SELECT * FROM flashcards WHERE id = ?', [id]);
+      createdCards.push(inserted);
+    }
+
+    res.json(createdCards);
+  } catch (error) {
+    console.error('[GENERATE] Error:', error.message);
+    console.error('[GENERATE] Stack:', error.stack);
     res.status(500).json({ error: error.message });
   }
 });

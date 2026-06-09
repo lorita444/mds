@@ -1,2 +1,77 @@
-focus/.env
-focus/.env*.local
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+!.env.sample
+*.pem
+*.key
+*.p8
+*.p12
+*.jks
+*.mobileprovision
+
+# Local app/runtime state
+.expo/
+**/.expo/
+.codex/
+.agents/
+*.sqlite
+*.sqlite3
+*.db
+backend/uploads/
+old_version/backend/uploads/
+
+# Build outputs
+dist/
+**/dist/
+build/
+**/build/
+web-build/
+coverage/
+**/coverage/
+.next/
+.nuxt/
+out/
+
+# Expo / React Native generated folders
+expo-env.d.ts
+focus/expo-env.d.ts
+ios/
+android/
+focus/ios/
+focus/android/
+.kotlin/
+*.orig.*
+
+# Logs and debug output
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Caches
+.cache/
+.parcel-cache/
+.turbo/
+.metro-health-check*
+.eslintcache
+*.tsbuildinfo
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

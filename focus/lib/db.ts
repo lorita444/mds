@@ -37,8 +37,21 @@ async function apiFetch(path: string, options: RequestInit = {}) {
   });
 
   if (!response.ok) {
-    const errorJson = await response.json().catch(() => ({}));
-    throw new Error(errorJson.error || `HTTP error: ${response.statusText}`);
+    const rawBody = await response.text().catch(() => '');
+    let errorMessage = rawBody;
+
+    try {
+      const parsed = rawBody ? JSON.parse(rawBody) : {};
+      errorMessage = parsed.error || parsed.message || rawBody;
+    } catch {
+      // Keep the raw response body for non-JSON errors such as Express 404 HTML.
+    }
+
+    throw new Error(
+      errorMessage
+        ? `HTTP ${response.status} on ${path}: ${errorMessage}`
+        : `HTTP ${response.status} on ${path}`,
+    );
   }
 
   return response.json();
@@ -216,6 +229,112 @@ export async function updateMaterialSummary(id: string, summary: string): Promis
   });
 }
 
+export async function notifyMaterialSummarizeStarted(id: string): Promise<void> {
+  await apiFetch(`/materials/${id}/summarize-start`, {
+    method: 'POST',
+    body: '{}',
+  });
+}
+
+export async function notifyMaterialSummarizeFailed(id: string, error: string): Promise<void> {
+  await apiFetch(`/materials/${id}/summarize-failed`, {
+    method: 'POST',
+    body: JSON.stringify({ error }),
+  });
+}
+
+export async function extractMaterialText(file: {
+  uri: string;
+  name: string;
+  mimeType?: string | null;
+}): Promise<string> {
+  const token = await AsyncStorage.getItem('auth_token');
+  const formData = new FormData();
+  formData.append('file', {
+    uri: file.uri,
+    name: file.name,
+    type: file.mimeType ?? 'application/octet-stream',
+  } as unknown as Blob);
+
+  const response = await fetch(`${API_URL}/materials/extract-text`, {
+    method: 'POST',
+    headers: {
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const rawBody = await response.text().catch(() => '');
+    let errorMessage = rawBody;
+
+    try {
+      const parsed = rawBody ? JSON.parse(rawBody) : {};
+      errorMessage = parsed.error || parsed.message || rawBody;
+    } catch {
+      // Keep raw body for non-JSON errors.
+    }
+
+    throw new Error(
+      errorMessage
+        ? `HTTP ${response.status} on /materials/extract-text: ${errorMessage}`
+        : `HTTP ${response.status} on /materials/extract-text`,
+    );
+  }
+
+  const result = await response.json();
+  if (!result.text || typeof result.text !== 'string') {
+    throw new Error('Backend did not return extracted text.');
+  }
+
+  return result.text;
+}
+
+export async function summarizeMaterialWithCodex(
+  materialId: string,
+  file: {
+    uri: string;
+    name: string;
+    mimeType?: string | null;
+  },
+): Promise<Material> {
+  const token = await AsyncStorage.getItem('auth_token');
+  const formData = new FormData();
+  formData.append('file', {
+    uri: file.uri,
+    name: file.name,
+    type: file.mimeType ?? 'application/octet-stream',
+  } as unknown as Blob);
+
+  const response = await fetch(`${API_URL}/materials/${materialId}/summarize-file`, {
+    method: 'POST',
+    headers: {
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const rawBody = await response.text().catch(() => '');
+    let errorMessage = rawBody;
+
+    try {
+      const parsed = rawBody ? JSON.parse(rawBody) : {};
+      errorMessage = parsed.error || parsed.message || rawBody;
+    } catch {
+      // Keep raw body for non-JSON errors.
+    }
+
+    throw new Error(
+      errorMessage
+        ? `HTTP ${response.status} on /materials/${materialId}/summarize-file: ${errorMessage}`
+        : `HTTP ${response.status} on /materials/${materialId}/summarize-file`,
+    );
+  }
+
+  return await response.json();
+}
+
 export async function markMaterialEmbedded(id: string): Promise<void> {
   await apiFetch(`/materials/${id}/embedded`, {
     method: 'PUT',
@@ -374,6 +493,26 @@ export async function getFlashcards(
   } catch (e) {
     console.error(e);
     return [];
+  }
+}
+
+export async function generateFlashcardsAI(
+  subjectId: string,
+  chapterId?: string | null,
+  count: number = 10,
+): Promise<Flashcard[]> {
+  console.log('[generateFlashcardsAI] Starting request', { subjectId, chapterId, count });
+  console.log('[generateFlashcardsAI] API_URL:', API_URL);
+  try {
+    const result = await apiFetch('/flashcards/generate', {
+      method: 'POST',
+      body: JSON.stringify({ subjectId, chapterId: chapterId || null, count }),
+    });
+    console.log('[generateFlashcardsAI] Success, got', result?.length, 'cards');
+    return result;
+  } catch (err) {
+    console.error('[generateFlashcardsAI] Error:', err);
+    throw err;
   }
 }
 
