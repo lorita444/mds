@@ -7,6 +7,7 @@ import {
   Pressable,
   Alert,
   RefreshControl,
+  useWindowDimensions,
 } from 'react-native';
 import { AI_AVATAR } from '../../utils/assets';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -81,6 +82,9 @@ export default function SubjectDetailScreen() {
   const { user } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
+  const actionGap = 6;
+  const actionCardWidth = Math.floor((screenWidth - spacing.md * 2 - actionGap * 2) / 3);
 
   const [subject, setSubject] = useState<Subject | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
@@ -296,21 +300,16 @@ export default function SubjectDetailScreen() {
         onPress={() => router.back()}
         style={({ pressed }) => ({
           alignSelf: 'flex-start',
-          minHeight: 44,
-          paddingHorizontal: spacing.md,
-          borderRadius: radius.md,
-          backgroundColor: pressed ? colors.bg.card : colors.bg.elevated,
-          borderWidth: 1,
-          borderColor: colors.bg.cardBorder,
-          flexDirection: 'row',
+          width: 44,
+          height: 44,
+          borderRadius: radius.full,
           alignItems: 'center',
-          gap: spacing.xs,
-          opacity: pressed ? 0.82 : 1,
+          justifyContent: 'center',
+          opacity: pressed ? 0.6 : 1,
         })}
       >
-        <Ionicons name={'chevron-back' as IoniconsName} size={18} color={colors.text.secondary} />
-        <Text style={{ color: colors.text.secondary, fontSize: typography.sizes.sm, fontWeight: typography.weights.semibold }}>
-          Portfolio
+        <Text style={{ color: colors.text.secondary, fontSize: 34, fontWeight: typography.weights.regular, lineHeight: 38 }}>
+          {'<'}
         </Text>
       </Pressable>
 
@@ -350,7 +349,7 @@ export default function SubjectDetailScreen() {
           </View>
 
           {/* AI action buttons */}
-          <View style={{ gap: spacing.sm }}>
+          <View style={{ flexDirection: 'row', gap: actionGap, alignSelf: 'stretch' }}>
             <Pressable
               onPress={() =>
                 router.push({
@@ -359,87 +358,144 @@ export default function SubjectDetailScreen() {
                 } as never)
               }
               style={({ pressed }) => ({
-                minHeight: 68,
-                backgroundColor: pressed ? 'rgba(219,39,119,0.18)' : 'rgba(219,39,119,0.12)',
-                borderWidth: 1.5,
-                borderColor: pressed ? colors.cosmic.pinkLight : 'rgba(219,39,119,0.35)',
-                borderRadius: radius.md,
-                paddingHorizontal: spacing.md,
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: spacing.md,
+                width: actionCardWidth,
                 opacity: pressed ? 0.8 : 1,
               })}
             >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1 }}>
+              {({ pressed }) => (
                 <View
                   style={{
-                    width: 44,
-                    height: 44,
+                    width: actionCardWidth,
+                    height: 122,
+                    backgroundColor: pressed ? 'rgba(219,39,119,0.22)' : 'rgba(219,39,119,0.14)',
+                    borderWidth: 1.5,
+                    borderColor: pressed ? colors.cosmic.pinkLight : 'rgba(219,39,119,0.38)',
                     borderRadius: radius.md,
-                    backgroundColor: 'rgba(219,39,119,0.16)',
+                    paddingHorizontal: spacing.xs,
+                    paddingVertical: spacing.sm,
+                    minWidth: 0,
                     alignItems: 'center',
                     justifyContent: 'center',
+                    gap: spacing.xs,
                   }}
                 >
-                  <Ionicons name={'rocket-outline' as IoniconsName} size={22} color={colors.cosmic.pinkLight} />
+                  <View
+                    style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: radius.md,
+                      backgroundColor: 'rgba(219,39,119,0.18)',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Ionicons name={'rocket-outline' as IoniconsName} size={27} color={colors.cosmic.pinkLight} />
+                  </View>
+                  <View style={{ alignItems: 'center', gap: 2, minWidth: 0 }}>
+                    <Text style={{ color: colors.text.primary, fontSize: typography.sizes.sm, fontWeight: typography.weights.bold, textAlign: 'center' }} numberOfLines={1} adjustsFontSizeToFit>
+                      Start Mission
+                    </Text>
+                    <Text style={{ color: colors.text.secondary, fontSize: typography.sizes.xs, textAlign: 'center' }} numberOfLines={1} adjustsFontSizeToFit>
+                      Focus timer
+                    </Text>
+                  </View>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: colors.text.primary, fontSize: typography.sizes.md, fontWeight: typography.weights.bold }}>
-                    Start Mission
-                  </Text>
-                  <Text style={{ color: colors.text.secondary, fontSize: typography.sizes.xs }}>
-                    Focus timer, rewards, and quiz
-                  </Text>
-                </View>
-              </View>
-              <Ionicons name={'chevron-forward' as IoniconsName} size={20} color={colors.cosmic.pinkLight} />
+              )}
             </Pressable>
-            <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-              <Pressable
-                onPress={() => router.push(`/ai-chat/${subject!.id}` as never)}
-                style={({ pressed }) => ({
-                  flex: 1,
-                  minHeight: 56,
-                  backgroundColor: colors.cosmic.purpleFaint,
-                  borderWidth: 1,
-                  borderColor: colors.cosmic.purpleGlow,
-                  borderRadius: radius.md,
-                  paddingHorizontal: spacing.md,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: spacing.sm,
-                  opacity: pressed ? 0.8 : 1,
-                })}
-              >
-                <Image source={AI_AVATAR} style={{ width: 26, height: 26 }} resizeMode="contain" />
-                <Text style={{ color: colors.cosmic.purpleLight, fontSize: typography.sizes.sm, fontWeight: typography.weights.semibold }}>
-                  AI Chat
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={() => router.push(`/flashcards/${subject!.id}` as never)}
-                style={({ pressed }) => ({
-                  flex: 1,
-                  minHeight: 56,
-                  backgroundColor: colors.cosmic.tealFaint,
-                  borderWidth: 1,
-                  borderColor: colors.cosmic.teal,
-                  borderRadius: radius.md,
-                  paddingHorizontal: spacing.md,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: spacing.sm,
-                  opacity: pressed ? 0.8 : 1,
-                })}
-              >
-                <Ionicons name={'albums-outline' as IoniconsName} size={21} color={colors.cosmic.tealLight} />
-                <Text style={{ color: colors.cosmic.tealLight, fontSize: typography.sizes.sm, fontWeight: typography.weights.semibold }}>
-                  Flashcards
-                </Text>
-              </Pressable>
-            </View>
+            <Pressable
+              onPress={() => router.push(`/ai-chat/${subject!.id}` as never)}
+              style={({ pressed }) => ({
+                width: actionCardWidth,
+                opacity: pressed ? 0.8 : 1,
+              })}
+            >
+              {({ pressed }) => (
+                <View
+                  style={{
+                    width: actionCardWidth,
+                    height: 122,
+                    backgroundColor: pressed ? 'rgba(124,58,237,0.22)' : 'rgba(124,58,237,0.14)',
+                    borderWidth: 1.5,
+                    borderColor: colors.cosmic.purpleGlow,
+                    borderRadius: radius.md,
+                    paddingHorizontal: spacing.xs,
+                    paddingVertical: spacing.sm,
+                    minWidth: 0,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: spacing.xs,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: radius.md,
+                      backgroundColor: 'rgba(124,58,237,0.18)',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Image source={AI_AVATAR} style={{ width: 34, height: 34 }} resizeMode="contain" />
+                  </View>
+                  <View style={{ alignItems: 'center', gap: 2, minWidth: 0 }}>
+                    <Text style={{ color: colors.text.primary, fontSize: typography.sizes.sm, fontWeight: typography.weights.bold, textAlign: 'center' }} numberOfLines={1} adjustsFontSizeToFit>
+                      AI Chat
+                    </Text>
+                    <Text style={{ color: colors.text.secondary, fontSize: typography.sizes.xs, textAlign: 'center' }} numberOfLines={1} adjustsFontSizeToFit>
+                      Ask notes
+                    </Text>
+                  </View>
+                </View>
+              )}
+            </Pressable>
+            <Pressable
+              onPress={() => router.push(`/flashcards/${subject!.id}` as never)}
+              style={({ pressed }) => ({
+                width: actionCardWidth,
+                opacity: pressed ? 0.8 : 1,
+              })}
+            >
+              {({ pressed }) => (
+                <View
+                  style={{
+                    width: actionCardWidth,
+                    height: 122,
+                    backgroundColor: pressed ? 'rgba(13,148,136,0.24)' : 'rgba(13,148,136,0.15)',
+                    borderWidth: 1.5,
+                    borderColor: colors.cosmic.teal,
+                    borderRadius: radius.md,
+                    paddingHorizontal: spacing.xs,
+                    paddingVertical: spacing.sm,
+                    minWidth: 0,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: spacing.xs,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: radius.md,
+                      backgroundColor: 'rgba(13,148,136,0.18)',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Ionicons name={'albums-outline' as IoniconsName} size={27} color={colors.cosmic.tealLight} />
+                  </View>
+                  <View style={{ alignItems: 'center', gap: 2, minWidth: 0 }}>
+                    <Text style={{ color: colors.text.primary, fontSize: typography.sizes.sm, fontWeight: typography.weights.bold, textAlign: 'center' }} numberOfLines={1} adjustsFontSizeToFit>
+                      Flashcards
+                    </Text>
+                    <Text style={{ color: colors.text.secondary, fontSize: typography.sizes.xs, textAlign: 'center' }} numberOfLines={1} adjustsFontSizeToFit>
+                      Review
+                    </Text>
+                  </View>
+                </View>
+              )}
+            </Pressable>
           </View>
 
           {/* Chapters */}
