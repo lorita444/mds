@@ -225,6 +225,7 @@ export default function PortfolioScreen() {
                     borderRadius: radius.lg,
                     padding: spacing.md,
                     minHeight: 118,
+                    justifyContent: 'center',
                     overflow: 'hidden',
                     shadowColor: s.color,
                     shadowOpacity: pressed ? 0.32 : 0.18,
@@ -280,7 +281,7 @@ export default function PortfolioScreen() {
                         </Text>
                       </View>
                     </View>
-                    <View style={{ gap: spacing.xs }}>
+                    <View style={{ alignSelf: 'stretch', justifyContent: 'center' }}>
                       <Pressable
                         onPress={(event) => {
                           event.stopPropagation();
