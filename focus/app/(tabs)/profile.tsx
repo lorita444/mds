@@ -7,7 +7,6 @@ import { useAuth } from '../../context/auth-context';
 import { getStreaks } from '../../lib/db';
 import { colors, spacing, typography, radius } from '../../utils/theme';
 import { Card } from '../../components/ui/Card';
-import { Button } from '../../components/ui/Button';
 import { CrystalIcon } from '../../components/placeholders/CrystalIcon';
 import type { Streak } from '../../lib/types';
 
@@ -471,67 +470,160 @@ export default function ProfileScreen() {
           Cosmic Log
         </Text>
         
-        {/* Reward History */}
         <Pressable
           onPress={() => router.push('/rewards-history' as never)}
           style={({ pressed }) => ({
-            backgroundColor: colors.bg.card,
-            borderWidth: 1,
-            borderColor: colors.bg.cardBorder,
-            borderRadius: radius.lg,
-            padding: spacing.md,
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: spacing.md,
-            opacity: pressed ? 0.75 : 1,
+            opacity: pressed ? 0.9 : 1,
           })}
         >
-          <Text style={{ fontSize: 20 }}>🏆</Text>
-          <Text
-            style={{
-              flex: 1,
-              color: colors.text.primary,
-              fontSize: typography.sizes.base,
-              fontWeight: typography.weights.medium,
-            }}
-          >
-            Reward History (Istoric Premii)
-          </Text>
-          <Text style={{ color: colors.text.muted, fontSize: 16 }}>›</Text>
+          {({ pressed }) => (
+            <View
+              style={{
+                backgroundColor: pressed ? '#1b2540' : '#151f36',
+                borderWidth: 1.5,
+                borderColor: pressed ? colors.cosmic.goldLight : 'rgba(167,139,250,0.36)',
+                borderRadius: radius.md,
+                paddingHorizontal: spacing.md,
+                paddingVertical: spacing.sm,
+                minHeight: 72,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: spacing.md,
+                shadowColor: colors.cosmic.gold,
+                shadowOpacity: pressed ? 0.18 : 0.08,
+                shadowRadius: pressed ? 12 : 8,
+                shadowOffset: { width: 0, height: 4 },
+                elevation: pressed ? 4 : 2,
+              }}
+            >
+              <View
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: radius.md,
+                  backgroundColor: 'rgba(217,119,6,0.14)',
+                  borderWidth: 1,
+                  borderColor: 'rgba(251,191,36,0.38)',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Ionicons name="trophy-outline" size={22} color={colors.cosmic.goldLight} />
+              </View>
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text style={{ color: colors.text.primary, fontSize: typography.sizes.base, fontWeight: typography.weights.bold }}>
+                  Reward History
+                </Text>
+                <Text style={{ color: colors.text.secondary, fontSize: typography.sizes.xs }} numberOfLines={1}>
+                  Istoric premii si deblocari
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={19} color={colors.text.muted} />
+            </View>
+          )}
         </Pressable>
 
-        {/* Settings */}
         <Pressable
           onPress={() => router.push('/settings' as never)}
           style={({ pressed }) => ({
-            backgroundColor: colors.bg.card,
-            borderWidth: 1,
-            borderColor: colors.bg.cardBorder,
-            borderRadius: radius.lg,
-            padding: spacing.md,
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: spacing.md,
-            opacity: pressed ? 0.75 : 1,
+            opacity: pressed ? 0.9 : 1,
           })}
         >
-          <Text style={{ fontSize: 20 }}>⚙️</Text>
-          <Text
-            style={{
-              flex: 1,
-              color: colors.text.primary,
-              fontSize: typography.sizes.base,
-              fontWeight: typography.weights.medium,
-            }}
-          >
-            Cosmic Settings (Setări aplicație)
-          </Text>
-          <Text style={{ color: colors.text.muted, fontSize: 16 }}>›</Text>
+          {({ pressed }) => (
+            <View
+              style={{
+                backgroundColor: pressed ? '#1b2540' : '#151f36',
+                borderWidth: 1.5,
+                borderColor: pressed ? colors.cosmic.purpleLight : 'rgba(167,139,250,0.36)',
+                borderRadius: radius.md,
+                paddingHorizontal: spacing.md,
+                paddingVertical: spacing.sm,
+                minHeight: 72,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: spacing.md,
+                shadowColor: colors.cosmic.purple,
+                shadowOpacity: pressed ? 0.18 : 0.08,
+                shadowRadius: pressed ? 12 : 8,
+                shadowOffset: { width: 0, height: 4 },
+                elevation: pressed ? 4 : 2,
+              }}
+            >
+              <View
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: radius.md,
+                  backgroundColor: colors.cosmic.purpleFaint,
+                  borderWidth: 1,
+                  borderColor: colors.cosmic.purpleGlow,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Ionicons name="settings-outline" size={22} color={colors.cosmic.purpleLight} />
+              </View>
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text style={{ color: colors.text.primary, fontSize: typography.sizes.base, fontWeight: typography.weights.bold }}>
+                  Cosmic Settings
+                </Text>
+                <Text style={{ color: colors.text.secondary, fontSize: typography.sizes.xs }} numberOfLines={1}>
+                  Setari aplicatie
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={19} color={colors.text.muted} />
+            </View>
+          )}
         </Pressable>
       </View>
 
       {/* Sign out */}
-      <Button label="Sign Out" variant="danger" onPress={handleSignOut} fullWidth size="lg" />
+      <Pressable
+        onPress={handleSignOut}
+        style={({ pressed }) => ({
+          opacity: pressed ? 0.88 : 1,
+        })}
+      >
+        {({ pressed }) => (
+          <View
+            style={{
+              backgroundColor: pressed ? 'rgba(239,68,68,0.18)' : 'rgba(127,29,29,0.18)',
+              borderWidth: 1.5,
+              borderColor: pressed ? 'rgba(248,113,113,0.58)' : 'rgba(239,68,68,0.32)',
+              borderRadius: radius.md,
+              paddingHorizontal: spacing.md,
+              paddingVertical: spacing.sm,
+              minHeight: 72,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: spacing.md,
+            }}
+          >
+            <View
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: radius.md,
+                backgroundColor: colors.status.errorFaint,
+                borderWidth: 1,
+                borderColor: 'rgba(239,68,68,0.35)',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Ionicons name="log-out-outline" size={22} color={colors.status.error} />
+            </View>
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text style={{ color: colors.text.primary, fontSize: typography.sizes.base, fontWeight: typography.weights.bold }}>
+                Sign Out
+              </Text>
+              <Text style={{ color: colors.text.secondary, fontSize: typography.sizes.xs }}>
+                Leave this account
+              </Text>
+            </View>
+          </View>
+        )}
+      </Pressable>
 
       {/* App info */}
       <View style={{ alignItems: 'center', gap: 4 }}>
