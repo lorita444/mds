@@ -1338,6 +1338,213 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
+app.post('/api/chat/respond', async (req, res) => {
+  const { subject_id, message, history = [] } = req.body;
+
+  if (!subject_id || !message || typeof message !== 'string') {
+    return res.status(400).json({ error: 'subject_id and message are required' });
+  }
+
+  const logBase = {
+    subjectId: subject_id,
+    messageLength: message.length,
+    at: new Date().toISOString(),
+  };
+
+  console.log('[AI_CHAT] START', logBase);
+
+  try {
+    const subject = await db.querySingle('SELECT * FROM subjects WHERE id = ?', [subject_id]);
+    if (!subject) return res.status(404).json({ error: 'Subject not found' });
+
+    const materials = await db.query(
+      'SELECT name, summary, is_summarized FROM materials WHERE subject_id = ? ORDER BY created_at ASC',
+      [subject_id]
+    );
+    const chapters = await db.query(
+      'SELECT name, description FROM chapters WHERE subject_id = ? ORDER BY order_index ASC, created_at ASC',
+      [subject_id]
+    );
+
+    const summaries = materials
+      .filter((m) => m.summary && String(m.summary).trim())
+      .map((m, index) => `Material ${index + 1}: ${m.name}\n${String(m.summary).trim()}`)
+      .join('\n\n');
+
+    const chapterContext = chapters.length
+      ? chapters.map((c, index) => `${index + 1}. ${c.name}${c.description ? ` - ${c.description}` : ''}`).join('\n')
+      : 'No chapters created yet.';
+
+    const recentHistory = Array.isArray(history)
+      ? history
+          .slice(-8)
+          .filter((m) => m && typeof m.content === 'string' && (m.role === 'user' || m.role === 'assistant'))
+          .map((m) => `${m.role === 'user' ? 'Student' : 'Assistant'}: ${m.content}`)
+          .join('\n')
+      : '';
+
+    const responseSchema = {
+      type: 'object',
+      properties: {
+        reply: { type: 'string' },
+      },
+      required: ['reply'],
+      additionalProperties: false,
+    };
+
+    const prompt = `Ești un asistent de studiu pentru materia "${subject.name}".
+Răspunde clar, util și concis în limba utilizatorului.
+Folosește în primul rând sumarizările materialelor. Dacă informația nu apare în materiale, spune asta explicit și oferă o explicație generală doar dacă este util.
+Nu inventa detalii specifice materialelor.
+Răspunde strict în JSON cu cheia "reply".
+
+Descriere materie:
+${subject.description || 'No description'}
+
+Capitole:
+${chapterContext}
+
+Sumarizări materiale:
+${summaries || 'No summarized materials available yet.'}
+
+Istoric recent:
+${recentHistory || 'No previous messages.'}
+
+Întrebarea studentului:
+${message}`;
+
+    console.log('[AI_CHAT] CODEX START', {
+      subjectId: subject_id,
+      promptLength: prompt.length,
+      summaryCount: materials.filter((m) => m.summary && String(m.summary).trim()).length,
+      at: new Date().toISOString(),
+    });
+
+    const { Codex } = await import('@openai/codex-sdk');
+    const codex = new Codex();
+    const thread = codex.startThread({ skipGitRepoCheck: true });
+    const turn = await thread.run(prompt.slice(0, 24000), { outputSchema: responseSchema });
+    const parsed = typeof turn.finalResponse === 'string'
+      ? JSON.parse(turn.finalResponse)
+      : turn.finalResponse;
+    const reply = parsed?.reply;
+
+    if (!reply || typeof reply !== 'string') {
+      throw new Error('Codex returned an invalid chat response format.');
+    }
+
+    console.log('[AI_CHAT] FINISH', {
+      subjectId: subject_id,
+      replyLength: reply.length,
+      at: new Date().toISOString(),
+    });
+
+    res.json({ reply, provider: 'codex-local' });
+  } catch (error) {
+    console.error('[AI_CHAT] FAILED', {
+      subjectId: subject_id,
+      error: error.message,
+      at: new Date().toISOString(),
+    });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/chat/explain-course', async (req, res) => {
+  const { subject_id } = req.body;
+
+  if (!subject_id) {
+    return res.status(400).json({ error: 'subject_id is required' });
+  }
+
+  console.log('[AI_CHAT_EXPLAIN] START', {
+    subjectId: subject_id,
+    at: new Date().toISOString(),
+  });
+
+  try {
+    const subject = await db.querySingle('SELECT * FROM subjects WHERE id = ?', [subject_id]);
+    if (!subject) return res.status(404).json({ error: 'Subject not found' });
+
+    const materials = await db.query(
+      'SELECT name, summary FROM materials WHERE subject_id = ? ORDER BY created_at ASC',
+      [subject_id]
+    );
+    const chapters = await db.query(
+      'SELECT name, description FROM chapters WHERE subject_id = ? ORDER BY order_index ASC, created_at ASC',
+      [subject_id]
+    );
+
+    const summaries = materials
+      .filter((m) => m.summary && String(m.summary).trim())
+      .map((m, index) => `Material ${index + 1}: ${m.name}\n${String(m.summary).trim()}`)
+      .join('\n\n');
+
+    const chapterContext = chapters.length
+      ? chapters.map((c, index) => `${index + 1}. ${c.name}${c.description ? ` - ${c.description}` : ''}`).join('\n')
+      : 'No chapters created yet.';
+
+    const responseSchema = {
+      type: 'object',
+      properties: {
+        explanation: { type: 'string' },
+      },
+      required: ['explanation'],
+      additionalProperties: false,
+    };
+
+    const prompt = `Ești un profesor care explică materia "${subject.name}".
+Construiește o explicație completă, structurată și ușor de urmărit, în română dacă materialele sau utilizatorul sunt în română.
+Folosește sumarizările materialelor ca sursă principală. Nu inventa detalii specifice care nu apar în materiale.
+Include: privire de ansamblu, concepte cheie, definiții importante, legături între concepte și un plan scurt de învățare.
+Răspunde strict în JSON cu cheia "explanation".
+
+Descriere materie:
+${subject.description || 'No description'}
+
+Capitole:
+${chapterContext}
+
+Sumarizări materiale:
+${summaries || 'No summarized materials available yet.'}`;
+
+    console.log('[AI_CHAT_EXPLAIN] CODEX START', {
+      subjectId: subject_id,
+      promptLength: prompt.length,
+      summaryCount: materials.filter((m) => m.summary && String(m.summary).trim()).length,
+      at: new Date().toISOString(),
+    });
+
+    const { Codex } = await import('@openai/codex-sdk');
+    const codex = new Codex();
+    const thread = codex.startThread({ skipGitRepoCheck: true });
+    const turn = await thread.run(prompt.slice(0, 24000), { outputSchema: responseSchema });
+    const parsed = typeof turn.finalResponse === 'string'
+      ? JSON.parse(turn.finalResponse)
+      : turn.finalResponse;
+    const explanation = parsed?.explanation;
+
+    if (!explanation || typeof explanation !== 'string') {
+      throw new Error('Codex returned an invalid course explanation format.');
+    }
+
+    console.log('[AI_CHAT_EXPLAIN] FINISH', {
+      subjectId: subject_id,
+      explanationLength: explanation.length,
+      at: new Date().toISOString(),
+    });
+
+    res.json({ explanation, provider: 'codex-local' });
+  } catch (error) {
+    console.error('[AI_CHAT_EXPLAIN] FAILED', {
+      subjectId: subject_id,
+      error: error.message,
+      at: new Date().toISOString(),
+    });
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ── QUIZZES ──────────────────────────────────────────────────
 
 app.post('/api/quizzes', async (req, res) => {

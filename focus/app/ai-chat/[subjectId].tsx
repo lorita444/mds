@@ -15,13 +15,14 @@ import { AI_AVATAR } from '../../utils/assets';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/auth-context';
-import { getChatHistory, saveMessage, getMaterials, getChapters, getSubject } from '../../lib/db';
-import { supabase } from '../../lib/supabase';
 import {
-  answerWithContext,
-  explainCourse,
-  isOllamaRunning,
-} from '../../lib/ollama';
+  explainCourseWithCodex,
+  generateChatReplyWithCodex,
+  getChatHistory,
+  getMaterials,
+  getSubject,
+  saveMessage,
+} from '../../lib/db';
 import { colors, spacing, typography, radius } from '../../utils/theme';
 import { Input } from '../../components/ui/Input';
 import { LoadingState } from '../../components/ui/LoadingState';
@@ -48,40 +49,26 @@ export default function AIChatScreen() {
   const [loading, setLoading] = useState(true);
   const [subjectName, setSubjectName] = useState('Subject');
   const [hasMaterials, setHasMaterials] = useState(false);
-  const [ollamaOk, setOllamaOk] = useState<boolean | null>(null);
   const [explaining, setExplaining] = useState(false);
-
-  const chaptersRef = useRef<{ name: string }[]>([]);
-  const summariesRef = useRef<string[]>([]);
 
   const load = useCallback(async () => {
     if (!subjectId || !user?.id) return;
     setLoading(true);
     try {
-      const [history, materials, subjectRes, chapters] = await Promise.all([
+      const [history, materials, subjectRes] = await Promise.all([
         getChatHistory(subjectId),
         getMaterials(subjectId),
         getSubject(subjectId),
-        getChapters(subjectId),
       ]);
       setMessages(history);
       setHasMaterials(materials.length > 0);
       setSubjectName(subjectRes?.name ?? 'Subject');
-      chaptersRef.current = chapters;
-      summariesRef.current = materials
-        .map((m) => m.summary)
-        .filter(Boolean) as string[];
     } finally {
       setLoading(false);
     }
   }, [subjectId, user?.id]);
 
   useEffect(() => { load(); }, [load]);
-
-  // Check Ollama status on mount
-  useEffect(() => {
-    isOllamaRunning().then(setOllamaOk);
-  }, []);
 
   useEffect(() => {
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
@@ -110,12 +97,7 @@ export default function AIChatScreen() {
         content: m.content,
       }));
 
-      const reply = await answerWithContext(
-        text.trim(),
-        summariesRef.current,
-        subjectName,
-        historyForAI,
-      );
+      const reply = await generateChatReplyWithCodex(subjectId, text.trim(), historyForAI);
 
       const savedReply = await saveMessage(subjectId, user.id, 'assistant', reply);
       if (savedReply) {
@@ -130,7 +112,7 @@ export default function AIChatScreen() {
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Eroare la răspuns AI';
-      Alert.alert('Eroare AI', `${msg}\n\nAsigură-te că Ollama rulează pe computer.`);
+      Alert.alert('Eroare AI', msg);
       setMessages((prev) => prev.filter((m) => m.id !== userMsg.id));
     } finally {
       setSending(false);
@@ -161,11 +143,7 @@ export default function AIChatScreen() {
     try {
       await saveMessage(subjectId!, user!.id, 'user', '📖 Explică-mi cursul complet și structurat');
 
-      const explanation = await explainCourse(
-        subjectName,
-        chaptersRef.current,
-        summariesRef.current,
-      );
+      const explanation = await explainCourseWithCodex(subjectId!);
 
       const savedReply = await saveMessage(subjectId!, user!.id, 'assistant', explanation);
       setMessages((prev) => {
@@ -176,7 +154,8 @@ export default function AIChatScreen() {
       });
     } catch (e) {
       setMessages((prev) => prev.filter((m) => m.id !== 'explain-loading'));
-      Alert.alert('Eroare', 'Nu am putut genera explicația. Verifică că Ollama rulează.');
+      const msg = e instanceof Error ? e.message : 'Nu am putut genera explicația.';
+      Alert.alert('Eroare', msg);
     } finally {
       setExplaining(false);
     }
@@ -200,22 +179,13 @@ export default function AIChatScreen() {
           <Text style={styles.headerSub}>{subjectName}</Text>
         </View>
         <View style={styles.statusRow}>
-          <View style={[styles.statusDot, { backgroundColor: ollamaOk === false ? '#ef4444' : ollamaOk ? '#22c55e' : '#f59e0b' }]} />
+          <View style={styles.statusDot} />
           <Image source={AI_AVATAR} style={{ width: 28, height: 28 }} resizeMode="contain" />
         </View>
       </View>
 
-      {/* Ollama warning */}
-      {ollamaOk === false && (
-        <View style={styles.warningBanner}>
-          <Text style={styles.warningText}>
-            ⚠️ Ollama nu rulează. Pornește Ollama pe computer: <Text style={{ fontWeight: '700' }}>ollama serve</Text>
-          </Text>
-        </View>
-      )}
-
       {/* No materials notice */}
-      {!hasMaterials && ollamaOk !== false && (
+      {!hasMaterials && (
         <View style={styles.infoBanner}>
           <Text style={styles.infoText}>
             💡 Nu ai materiale uploadate. Uploadează PDF-uri sau notițe pentru răspunsuri mai precise.
@@ -226,10 +196,10 @@ export default function AIChatScreen() {
       {/* Explain Course Button */}
       <Pressable
         onPress={handleExplainCourse}
-        disabled={explaining || ollamaOk === false}
+        disabled={explaining}
         style={({ pressed }) => [
           styles.explainBtn,
-          { opacity: pressed || explaining || ollamaOk === false ? 0.6 : 1 },
+          { opacity: pressed || explaining ? 0.6 : 1 },
         ]}
       >
         <Text style={styles.explainBtnText}>
@@ -348,16 +318,7 @@ const styles = StyleSheet.create({
   headerTitle: { color: colors.text.primary, fontSize: typography.sizes.md, fontWeight: typography.weights.bold },
   headerSub: { color: colors.text.muted, fontSize: typography.sizes.xs },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  statusDot: { width: 8, height: 8, borderRadius: 4 },
-  warningBanner: {
-    margin: spacing.md,
-    backgroundColor: 'rgba(239,68,68,0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(239,68,68,0.3)',
-    borderRadius: radius.md,
-    padding: spacing.md,
-  },
-  warningText: { color: '#fca5a5', fontSize: typography.sizes.sm },
+  statusDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.status.success },
   infoBanner: {
     marginHorizontal: spacing.md,
     marginTop: spacing.sm,

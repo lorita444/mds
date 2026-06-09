@@ -564,6 +564,26 @@ export async function saveMessage(
   });
 }
 
+export async function generateChatReplyWithCodex(
+  subjectId: string,
+  message: string,
+  history: { role: 'user' | 'assistant'; content: string }[],
+): Promise<string> {
+  const result = await apiFetch('/chat/respond', {
+    method: 'POST',
+    body: JSON.stringify({ subject_id: subjectId, message, history }),
+  });
+  return result.reply;
+}
+
+export async function explainCourseWithCodex(subjectId: string): Promise<string> {
+  const result = await apiFetch('/chat/explain-course', {
+    method: 'POST',
+    body: JSON.stringify({ subject_id: subjectId }),
+  });
+  return result.explanation;
+}
+
 // ── QUIZZES ──────────────────────────────────────────────────
 
 export async function createQuiz(
