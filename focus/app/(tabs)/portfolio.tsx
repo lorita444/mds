@@ -10,6 +10,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/auth-context';
 import { addSubject, fetchSubjects, removeSubject } from '../../services/subjects.service';
@@ -23,6 +24,8 @@ import { Modal } from '../../components/ui/Modal';
 import { ErrorState } from '../../components/ui/ErrorState';
 import { SkeletonCard } from '../../components/ui/Skeleton';
 import type { Subject } from '../../lib/types';
+
+type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
 
 const SUBJECT_COLORS = [
   '#7c3aed', '#0d9488', '#db2777', '#d97706',
@@ -141,11 +144,35 @@ export default function PortfolioScreen() {
       }
     >
       {/* Header */}
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Text style={{ color: colors.text.primary, fontSize: typography.sizes.xl, fontWeight: typography.weights.heavy }}>
-          Portfolio
-        </Text>
-        <Button label="+ Subject" size="sm" variant="ghost" onPress={() => setShowCreate(true)} />
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.md }}>
+        <View style={{ gap: 3 }}>
+          <Text style={{ color: colors.text.primary, fontSize: typography.sizes.xxl, fontWeight: typography.weights.heavy }}>
+            Portfolio
+          </Text>
+          <Text style={{ color: colors.text.secondary, fontSize: typography.sizes.sm }}>
+            {loading ? 'Loading subjects...' : `${subjects.length} subject${subjects.length === 1 ? '' : 's'} in your archive`}
+          </Text>
+        </View>
+        <Pressable
+          onPress={() => setShowCreate(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Create new subject"
+          style={({ pressed }) => ({
+            width: 52,
+            height: 52,
+            borderRadius: radius.md,
+            backgroundColor: pressed ? 'rgba(124,58,237,0.2)' : colors.bg.elevated,
+            borderWidth: 1,
+            borderColor: pressed ? colors.cosmic.purpleGlow : colors.bg.cardBorder,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: spacing.xs,
+            opacity: pressed ? 0.86 : 1,
+          })}
+        >
+          <Ionicons name={'add' as IoniconsName} size={27} color={colors.cosmic.purpleLight} />
+        </Pressable>
       </View>
 
       {loading ? (
@@ -179,58 +206,106 @@ export default function PortfolioScreen() {
           <Button label="Create Your First Subject" onPress={() => setShowCreate(true)} size="lg" fullWidth />
         </View>
       ) : (
-        <View style={{ gap: spacing.sm }}>
+        <View style={{ gap: spacing.md }}>
           {subjects.map((s) => (
             <Pressable
               key={s.id}
               onPress={() => router.push(`/subject/${s.id}` as never)}
-              onLongPress={() => handleDelete(s)}
               style={({ pressed }) => ({
-                backgroundColor: colors.bg.card,
-                borderWidth: 1,
-                borderColor: colors.bg.cardBorder,
-                borderRadius: radius.lg,
-                padding: spacing.md,
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: spacing.md,
-                opacity: pressed ? 0.82 : 1,
+                marginTop: spacing.xs,
+                opacity: pressed ? 0.94 : 1,
               })}
             >
-              <View
-                style={{
-                  width: 52,
-                  height: 52,
-                  borderRadius: radius.md,
-                  backgroundColor: `${s.color}22`,
-                  borderWidth: 1.5,
-                  borderColor: `${s.color}55`,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                {s.emoji ? (
-                  <Text style={{ fontSize: 26 }}>{s.emoji}</Text>
-                ) : (
-                  <Text style={{ fontSize: 22, fontWeight: '700', color: s.color }}>
-                    {s.name.charAt(0).toUpperCase()}
-                  </Text>
-                )}
-              </View>
-              <View style={{ flex: 1, gap: 3 }}>
-                <Text style={{ color: colors.text.primary, fontSize: typography.sizes.md, fontWeight: typography.weights.semibold }}>
-                  {s.name}
-                </Text>
-                {s.description && (
-                  <Text style={{ color: colors.text.secondary, fontSize: typography.sizes.sm }} numberOfLines={1}>
-                    {s.description}
-                  </Text>
-                )}
-                <Text style={{ color: colors.text.muted, fontSize: typography.sizes.xs }}>
-                  Hold to delete · Tap to open
-                </Text>
-              </View>
-              <Text style={{ color: colors.text.muted, fontSize: 20 }}>›</Text>
+              {({ pressed }) => (
+                <View
+                  style={{
+                    backgroundColor: pressed ? '#1b2540' : '#151f36',
+                    borderWidth: 2,
+                    borderColor: pressed ? `${s.color}cc` : 'rgba(167,139,250,0.36)',
+                    borderRadius: radius.lg,
+                    padding: spacing.md,
+                    minHeight: 118,
+                    overflow: 'hidden',
+                    shadowColor: s.color,
+                    shadowOpacity: pressed ? 0.32 : 0.18,
+                    shadowRadius: pressed ? 18 : 12,
+                    shadowOffset: { width: 0, height: 6 },
+                    elevation: pressed ? 8 : 4,
+                  }}
+                >
+                  <View
+                    pointerEvents="none"
+                    style={{
+                      position: 'absolute',
+                      left: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: 7,
+                    }}
+                  />
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+                    <View
+                      style={{
+                        width: 60,
+                        height: 60,
+                        borderRadius: radius.md,
+                        backgroundColor: `${s.color}22`,
+                        borderWidth: 1.5,
+                        borderColor: `${s.color}55`,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      {s.emoji ? (
+                        <Text style={{ fontSize: 26 }}>{s.emoji}</Text>
+                      ) : (
+                        <Text style={{ fontSize: 22, fontWeight: '700', color: s.color }}>
+                          {s.name.charAt(0).toUpperCase()}
+                        </Text>
+                      )}
+                    </View>
+                    <View style={{ flex: 1, gap: 6 }}>
+                      <Text style={{ color: colors.text.primary, fontSize: typography.sizes.md, fontWeight: typography.weights.bold }}>
+                        {s.name}
+                      </Text>
+                      {s.description && (
+                        <Text style={{ color: colors.text.secondary, fontSize: typography.sizes.sm }} numberOfLines={2}>
+                          {s.description}
+                        </Text>
+                      )}
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+                        <Ionicons name={'folder-open-outline' as IoniconsName} size={13} color={colors.text.muted} />
+                        <Text style={{ color: colors.text.muted, fontSize: typography.sizes.xs }}>
+                          Study space
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={{ gap: spacing.xs }}>
+                      <Pressable
+                        onPress={(event) => {
+                          event.stopPropagation();
+                          handleDelete(s);
+                        }}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Delete ${s.name}`}
+                        hitSlop={8}
+                        style={({ pressed: deletePressed }) => ({
+                          width: 48,
+                          height: 48,
+                          borderRadius: radius.md,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          backgroundColor: deletePressed ? colors.status.errorFaint : 'rgba(255,255,255,0.04)',
+                          borderWidth: 1,
+                          borderColor: deletePressed ? 'rgba(239,68,68,0.4)' : 'rgba(255,255,255,0.08)',
+                        })}
+                      >
+                        <Ionicons name={'trash-outline' as IoniconsName} size={19} color={colors.text.muted} />
+                      </Pressable>
+                    </View>
+                  </View>
+                </View>
+              )}
             </Pressable>
           ))}
         </View>

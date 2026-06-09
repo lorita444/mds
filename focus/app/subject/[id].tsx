@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { AI_AVATAR } from '../../utils/assets';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as DocumentPicker from 'expo-document-picker';
 import { useAuth } from '../../context/auth-context';
@@ -34,6 +35,8 @@ import { Modal } from '../../components/ui/Modal';
 import { ErrorState } from '../../components/ui/ErrorState';
 import { SkeletonBox, SkeletonCard } from '../../components/ui/Skeleton';
 import type { Subject, Chapter, Material } from '../../lib/types';
+
+type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
 
 function formatBytes(b: number): string {
   if (b < 1024) return `${b} B`;
@@ -146,7 +149,7 @@ export default function SubjectDetailScreen() {
         });
       }
     },
-    [subject?.name],
+    [],
   );
 
   const handleAddChapter = async () => {
@@ -268,6 +271,7 @@ export default function SubjectDetailScreen() {
   }
 
   const unassignedMaterials = materials.filter((m) => !m.chapter_id);
+  const summarizedCount = materials.filter((m) => m.is_summarized).length;
 
   return (
     <ScrollView
@@ -288,8 +292,26 @@ export default function SubjectDetailScreen() {
       }
     >
       {/* Back */}
-      <Pressable onPress={() => router.back()} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-        <Text style={{ color: colors.text.muted, fontSize: typography.sizes.sm }}>‹ Portfolio</Text>
+      <Pressable
+        onPress={() => router.back()}
+        style={({ pressed }) => ({
+          alignSelf: 'flex-start',
+          minHeight: 44,
+          paddingHorizontal: spacing.md,
+          borderRadius: radius.md,
+          backgroundColor: pressed ? colors.bg.card : colors.bg.elevated,
+          borderWidth: 1,
+          borderColor: colors.bg.cardBorder,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: spacing.xs,
+          opacity: pressed ? 0.82 : 1,
+        })}
+      >
+        <Ionicons name={'chevron-back' as IoniconsName} size={18} color={colors.text.secondary} />
+        <Text style={{ color: colors.text.secondary, fontSize: typography.sizes.sm, fontWeight: typography.weights.semibold }}>
+          Portfolio
+        </Text>
       </Pressable>
 
       {loading ? (
@@ -312,7 +334,7 @@ export default function SubjectDetailScreen() {
             >
               <Text style={{ fontSize: 26 }}>{subject!.emoji}</Text>
             </View>
-            <View style={{ flex: 1 }}>
+            <View style={{ flex: 1, gap: 4 }}>
               <Text style={{ color: colors.text.primary, fontSize: typography.sizes.xl, fontWeight: typography.weights.heavy }}>
                 {subject!.name}
               </Text>
@@ -321,49 +343,14 @@ export default function SubjectDetailScreen() {
                   {subject!.description}
                 </Text>
               )}
+              <Text style={{ color: colors.text.muted, fontSize: typography.sizes.xs }}>
+                {chapters.length} chapter{chapters.length === 1 ? '' : 's'} · {materials.length} material{materials.length === 1 ? '' : 's'} · {summarizedCount} summarized
+              </Text>
             </View>
           </View>
 
           {/* AI action buttons */}
-          <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-            <Pressable
-              onPress={() => router.push(`/ai-chat/${subject!.id}` as never)}
-              style={({ pressed }) => ({
-                flex: 1,
-                backgroundColor: colors.cosmic.purpleFaint,
-                borderWidth: 1,
-                borderColor: colors.cosmic.purpleGlow,
-                borderRadius: radius.lg,
-                padding: spacing.md,
-                alignItems: 'center',
-                gap: 6,
-                opacity: pressed ? 0.8 : 1,
-              })}
-            >
-              <Image source={AI_AVATAR} style={{ width: 26, height: 26 }} resizeMode="contain" />
-              <Text style={{ color: colors.cosmic.purpleLight, fontSize: typography.sizes.xs, fontWeight: typography.weights.semibold, textAlign: 'center' }}>
-                AI Chat
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => router.push(`/flashcards/${subject!.id}` as never)}
-              style={({ pressed }) => ({
-                flex: 1,
-                backgroundColor: colors.cosmic.tealFaint,
-                borderWidth: 1,
-                borderColor: colors.cosmic.teal,
-                borderRadius: radius.lg,
-                padding: spacing.md,
-                alignItems: 'center',
-                gap: 6,
-                opacity: pressed ? 0.8 : 1,
-              })}
-            >
-              <Text style={{ fontSize: 22 }}>🃏</Text>
-              <Text style={{ color: colors.cosmic.tealLight, fontSize: typography.sizes.xs, fontWeight: typography.weights.semibold, textAlign: 'center' }}>
-                Flashcards
-              </Text>
-            </Pressable>
+          <View style={{ gap: spacing.sm }}>
             <Pressable
               onPress={() =>
                 router.push({
@@ -372,22 +359,87 @@ export default function SubjectDetailScreen() {
                 } as never)
               }
               style={({ pressed }) => ({
-                flex: 1,
-                backgroundColor: 'rgba(219,39,119,0.1)',
-                borderWidth: 1,
-                borderColor: 'rgba(219,39,119,0.3)',
-                borderRadius: radius.lg,
-                padding: spacing.md,
+                minHeight: 68,
+                backgroundColor: pressed ? 'rgba(219,39,119,0.18)' : 'rgba(219,39,119,0.12)',
+                borderWidth: 1.5,
+                borderColor: pressed ? colors.cosmic.pinkLight : 'rgba(219,39,119,0.35)',
+                borderRadius: radius.md,
+                paddingHorizontal: spacing.md,
+                flexDirection: 'row',
                 alignItems: 'center',
-                gap: 6,
+                justifyContent: 'space-between',
+                gap: spacing.md,
                 opacity: pressed ? 0.8 : 1,
               })}
             >
-              <Text style={{ fontSize: 22 }}>🎯</Text>
-              <Text style={{ color: colors.cosmic.pinkLight, fontSize: typography.sizes.xs, fontWeight: typography.weights.semibold, textAlign: 'center' }}>
-                Mission
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1 }}>
+                <View
+                  style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: radius.md,
+                    backgroundColor: 'rgba(219,39,119,0.16)',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Ionicons name={'rocket-outline' as IoniconsName} size={22} color={colors.cosmic.pinkLight} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: colors.text.primary, fontSize: typography.sizes.md, fontWeight: typography.weights.bold }}>
+                    Start Mission
+                  </Text>
+                  <Text style={{ color: colors.text.secondary, fontSize: typography.sizes.xs }}>
+                    Focus timer, rewards, and quiz
+                  </Text>
+                </View>
+              </View>
+              <Ionicons name={'chevron-forward' as IoniconsName} size={20} color={colors.cosmic.pinkLight} />
             </Pressable>
+            <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+              <Pressable
+                onPress={() => router.push(`/ai-chat/${subject!.id}` as never)}
+                style={({ pressed }) => ({
+                  flex: 1,
+                  minHeight: 56,
+                  backgroundColor: colors.cosmic.purpleFaint,
+                  borderWidth: 1,
+                  borderColor: colors.cosmic.purpleGlow,
+                  borderRadius: radius.md,
+                  paddingHorizontal: spacing.md,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: spacing.sm,
+                  opacity: pressed ? 0.8 : 1,
+                })}
+              >
+                <Image source={AI_AVATAR} style={{ width: 26, height: 26 }} resizeMode="contain" />
+                <Text style={{ color: colors.cosmic.purpleLight, fontSize: typography.sizes.sm, fontWeight: typography.weights.semibold }}>
+                  AI Chat
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => router.push(`/flashcards/${subject!.id}` as never)}
+                style={({ pressed }) => ({
+                  flex: 1,
+                  minHeight: 56,
+                  backgroundColor: colors.cosmic.tealFaint,
+                  borderWidth: 1,
+                  borderColor: colors.cosmic.teal,
+                  borderRadius: radius.md,
+                  paddingHorizontal: spacing.md,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: spacing.sm,
+                  opacity: pressed ? 0.8 : 1,
+                })}
+              >
+                <Ionicons name={'albums-outline' as IoniconsName} size={21} color={colors.cosmic.tealLight} />
+                <Text style={{ color: colors.cosmic.tealLight, fontSize: typography.sizes.sm, fontWeight: typography.weights.semibold }}>
+                  Flashcards
+                </Text>
+              </Pressable>
+            </View>
           </View>
 
           {/* Chapters */}
@@ -404,7 +456,7 @@ export default function SubjectDetailScreen() {
               >
                 Chapters ({chapters.length})
               </Text>
-              <Button label="+ Chapter" size="sm" variant="ghost" onPress={() => setShowAddChapter(true)} />
+              <Button label="New Chapter" size="md" variant="ghost" onPress={() => setShowAddChapter(true)} />
             </View>
 
             {chapters.map((chapter) => {
@@ -431,18 +483,30 @@ export default function SubjectDetailScreen() {
                           onPress={() => handleUploadMaterial(chapter.id)}
                           style={({ pressed }) => ({
                             backgroundColor: colors.cosmic.purpleFaint,
-                            borderRadius: radius.sm,
-                            paddingHorizontal: 10,
-                            paddingVertical: 5,
+                            minHeight: 44,
+                            borderRadius: radius.md,
+                            paddingHorizontal: spacing.md,
+                            paddingVertical: spacing.sm,
+                            justifyContent: 'center',
                             opacity: pressed ? 0.7 : 1,
                           })}
                         >
-                          <Text style={{ color: colors.cosmic.purpleLight, fontSize: typography.sizes.xs, fontWeight: typography.weights.semibold }}>
-                            {uploading ? '…' : '+ Upload'}
+                          <Text style={{ color: colors.cosmic.purpleLight, fontSize: typography.sizes.sm, fontWeight: typography.weights.semibold }}>
+                            {uploading ? 'Uploading...' : 'Upload'}
                           </Text>
                         </Pressable>
-                        <Pressable onPress={() => handleDeleteChapter(chapter)} style={{ padding: 5 }}>
-                          <Text style={{ color: colors.text.muted, fontSize: 16 }}>✕</Text>
+                        <Pressable
+                          onPress={() => handleDeleteChapter(chapter)}
+                          style={({ pressed }) => ({
+                            width: 44,
+                            height: 44,
+                            borderRadius: radius.md,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            backgroundColor: pressed ? colors.status.errorFaint : 'rgba(255,255,255,0.03)',
+                          })}
+                        >
+                          <Ionicons name={'trash-outline' as IoniconsName} size={18} color={colors.text.muted} />
                         </Pressable>
                       </View>
                     </View>
@@ -493,14 +557,16 @@ export default function SubjectDetailScreen() {
                 onPress={() => handleUploadMaterial(null)}
                 style={({ pressed }) => ({
                   backgroundColor: colors.bg.elevated,
-                  borderRadius: radius.sm,
-                  paddingHorizontal: 10,
-                  paddingVertical: 5,
+                  minHeight: 44,
+                  borderRadius: radius.md,
+                  paddingHorizontal: spacing.md,
+                  paddingVertical: spacing.sm,
+                  justifyContent: 'center',
                   opacity: pressed ? 0.7 : 1,
                 })}
               >
-                <Text style={{ color: colors.text.secondary, fontSize: typography.sizes.xs }}>
-                  {uploading ? 'Uploading…' : '+ Upload'}
+                <Text style={{ color: colors.text.secondary, fontSize: typography.sizes.sm, fontWeight: typography.weights.semibold }}>
+                  {uploading ? 'Uploading...' : 'Upload'}
                 </Text>
               </Pressable>
             </View>
@@ -574,10 +640,10 @@ function MaterialRow({
   onDelete: () => void;
 }) {
   const icon = material.file_type.includes('pdf')
-    ? '📄'
+    ? 'document-text-outline'
     : material.file_type.includes('text') || material.file_type.includes('word')
-    ? '📝'
-    : '📎';
+    ? 'reader-outline'
+    : 'attach-outline';
 
   return (
     <View
@@ -588,10 +654,21 @@ function MaterialRow({
         backgroundColor: colors.bg.secondary,
         borderRadius: radius.sm,
         padding: spacing.sm,
-        paddingLeft: 28,
+        minHeight: 56,
       }}
     >
-      <Text style={{ fontSize: 16 }}>{icon}</Text>
+      <View
+        style={{
+          width: 36,
+          height: 36,
+          borderRadius: radius.sm,
+          backgroundColor: 'rgba(255,255,255,0.04)',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Ionicons name={icon as IoniconsName} size={18} color={colors.text.secondary} />
+      </View>
       <View style={{ flex: 1, gap: 2 }}>
         <Text
           style={{ color: colors.text.primary, fontSize: typography.sizes.sm, fontWeight: typography.weights.medium }}
@@ -647,8 +724,18 @@ function MaterialRow({
           )}
         </View>
       </View>
-      <Pressable onPress={onDelete} style={{ padding: 4 }}>
-        <Text style={{ color: colors.text.muted, fontSize: 14 }}>✕</Text>
+      <Pressable
+        onPress={onDelete}
+        style={({ pressed }) => ({
+          width: 44,
+          height: 44,
+          borderRadius: radius.md,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: pressed ? colors.status.errorFaint : 'transparent',
+        })}
+      >
+        <Ionicons name={'trash-outline' as IoniconsName} size={18} color={colors.text.muted} />
       </Pressable>
     </View>
   );
