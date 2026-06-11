@@ -166,8 +166,8 @@ export default function AIChatScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={insets.bottom}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={0}
     >
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
@@ -199,11 +199,16 @@ export default function AIChatScreen() {
         disabled={explaining}
         style={({ pressed }) => [
           styles.explainBtn,
-          { opacity: pressed || explaining ? 0.6 : 1 },
+          pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] },
+          explaining && { opacity: 0.55 },
         ]}
       >
+        {explaining
+          ? <ActivityIndicator size="small" color={colors.text.primary} />
+          : <Text style={styles.explainBtnIcon}>📖</Text>
+        }
         <Text style={styles.explainBtnText}>
-          {explaining ? '⏳ Se generează...' : '📖 Explică Cursul Complet'}
+          {explaining ? 'Se generează...' : 'Explică Cursul Complet'}
         </Text>
       </Pressable>
 
@@ -273,7 +278,7 @@ export default function AIChatScreen() {
       </ScrollView>
 
       {/* Input bar */}
-      <View style={[styles.inputBar, { paddingBottom: insets.bottom + spacing.sm }]}>
+      <View style={[styles.inputBar, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
         <View style={{ flex: 1 }}>
           <Input
             placeholder="Întreabă despre materiale..."
@@ -332,17 +337,28 @@ const styles = StyleSheet.create({
   explainBtn: {
     marginHorizontal: spacing.md,
     marginVertical: spacing.sm,
-    backgroundColor: colors.cosmic.purpleFaint,
-    borderWidth: 1,
-    borderColor: colors.cosmic.purpleGlow,
+    backgroundColor: colors.cosmic.purple,
     borderRadius: radius.lg,
-    paddingVertical: spacing.sm + 2,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    shadowColor: colors.cosmic.purple,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.45,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  explainBtnIcon: {
+    fontSize: typography.sizes.md,
   },
   explainBtnText: {
-    color: colors.cosmic.purpleLight,
-    fontSize: typography.sizes.sm,
-    fontWeight: typography.weights.bold,
+    color: colors.text.primary,
+    fontSize: typography.sizes.base,
+    fontWeight: typography.weights.semibold,
+    letterSpacing: typography.tracking.wide,
   },
   messageList: {
     paddingHorizontal: spacing.md,
