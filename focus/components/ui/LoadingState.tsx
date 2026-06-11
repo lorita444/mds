@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { View, Text, Image, Animated, StyleSheet, Dimensions } from 'react-native';
-import { APP_ICON } from '../../utils/assets';
+import { View, Text, Animated, StyleSheet, Dimensions } from 'react-native';
 import { colors, typography, spacing } from '../../utils/theme';
 
 const { width: W } = Dimensions.get('window');
@@ -52,11 +51,6 @@ export function LoadingState({
         ]}
       />
 
-      {/* Icon — fixed size, never scales */}
-      <View style={styles.iconWrapper}>
-        <Image source={APP_ICON} style={styles.icon} resizeMode="contain" />
-      </View>
-
       {/* Text block */}
       <View style={styles.textBlock}>
         <Text style={styles.message}>{message}</Text>
@@ -86,15 +80,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(124,58,237,0.25)',
     borderWidth: 1.5,
     borderColor: 'rgba(167,139,250,0.6)',
-  },
-  iconWrapper: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1,
-  },
-  icon: {
-    width: 80,
-    height: 80,
   },
   textBlock: {
     alignItems: 'center',

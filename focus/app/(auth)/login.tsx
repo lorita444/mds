@@ -359,10 +359,13 @@ const styles = StyleSheet.create({
   },
   centerLink: {
     alignItems: 'center',
+    paddingVertical: spacing.xs,
   },
   mutedLink: {
-    color: colors.text.muted,
+    color: colors.text.secondary,
     fontSize: typography.sizes.sm,
+    textDecorationLine: 'underline',
+    textDecorationColor: colors.text.muted,
   },
   secondaryLink: {
     color: colors.text.secondary,
@@ -371,6 +374,8 @@ const styles = StyleSheet.create({
   accentLink: {
     color: colors.cosmic.purpleLight,
     fontWeight: typography.weights.semibold,
+    textDecorationLine: 'underline',
+    textDecorationColor: colors.cosmic.purpleLight,
   },
   successCard: {
     backgroundColor: colors.status.successFaint,

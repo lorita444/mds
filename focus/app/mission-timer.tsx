@@ -4,7 +4,7 @@ import {
   Text,
   Alert,
   AppState,
-  Pressable,
+  StyleSheet,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,7 +12,6 @@ import { completeSession, abandonSession } from '../lib/db';
 import { colors, spacing, typography, radius } from '../utils/theme';
 import { Button } from '../components/ui/Button';
 import { TimerDisplay } from '../components/ui/TimerDisplay';
-import { Card } from '../components/ui/Card';
 import { useAuth } from '../context/auth-context';
 import {
   scheduleActiveSessionTimer,
@@ -182,100 +181,71 @@ export default function MissionTimerScreen() {
       : 'Mission complete — claiming reward…';
 
   return (
-    <View
-      style={{
-        flex: 1,
-        backgroundColor: colors.bg.primary,
-        paddingTop: insets.top + spacing.md,
-        paddingBottom: insets.bottom + spacing.xl,
-        paddingHorizontal: spacing.md,
-      }}
-    >
+    <View style={[styles.root, { paddingTop: insets.top }]}>
+      {/* Atmospheric background blobs */}
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        <View
+          style={[
+            styles.blob,
+            {
+              width: 320,
+              height: 320,
+              borderRadius: 160,
+              backgroundColor: colors.cosmic.purple,
+              opacity: 0.06 + elapsedPercent * 0.08,
+              top: -60,
+              left: -80,
+            },
+          ]}
+        />
+        <View
+          style={[
+            styles.blob,
+            {
+              width: 200,
+              height: 200,
+              borderRadius: 100,
+              backgroundColor: colors.cosmic.purpleLight,
+              opacity: 0.04 + elapsedPercent * 0.05,
+              bottom: 80,
+              right: -40,
+            },
+          ]}
+        />
+      </View>
+
       {/* Header */}
-      <View style={{ gap: 2, marginBottom: spacing.xl }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-          <Text style={{ fontSize: 16 }}>🎯</Text>
-          <Text
-            style={{
-              color: colors.crystal.primary,
-              fontSize: typography.sizes.xs,
-              fontWeight: typography.weights.semibold,
-              letterSpacing: typography.tracking.widest,
-              textTransform: 'uppercase',
-            }}
-          >
-            Mission Mode
-          </Text>
+      <View style={[styles.header, { paddingTop: spacing.md }]}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+          <Text style={{ fontSize: 14 }}>🎯</Text>
+          <Text style={styles.missionLabel}>Mission Mode</Text>
         </View>
         {subjectName ? (
-          <Text
-            style={{
-              color: colors.text.primary,
-              fontSize: typography.sizes.lg,
-              fontWeight: typography.weights.heavy,
-            }}
-          >
-            {subjectName}
-          </Text>
+          <Text style={styles.subjectName} numberOfLines={1}>{subjectName}</Text>
         ) : null}
       </View>
 
-      {/* Timer */}
-      <TimerDisplay
-        remainingSeconds={remaining}
-        totalSeconds={plannedSeconds}
-        label="Remaining"
-        size="lg"
-      />
+      {/* Center section — timer + info */}
+      <View style={styles.center}>
+        <TimerDisplay
+          remainingSeconds={remaining}
+          totalSeconds={plannedSeconds}
+          label="Remaining"
+          size="lg"
+        />
 
-      {/* Badges */}
-      <View
-        style={{
-          flexDirection: 'row',
-          gap: spacing.xs,
-          marginTop: spacing.md,
-          flexWrap: 'wrap',
-        }}
-      >
+        <Text style={styles.motivation}>{motivationText}</Text>
+
         {sessionHasQuiz && (
-          <View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 4,
-              paddingHorizontal: spacing.sm,
-              paddingVertical: 4,
-              borderRadius: radius.full,
-              backgroundColor: colors.bg.elevated,
-              borderWidth: 1,
-              borderColor: colors.crystal.glow,
-            }}
-          >
+          <View style={styles.quizBadge}>
             <Text style={{ fontSize: 12 }}>📝</Text>
-            <Text style={{ color: colors.crystal.primary, fontSize: typography.sizes.xs }}>
-              Quiz at end
-            </Text>
+            <Text style={styles.quizBadgeText}>Quiz at end</Text>
           </View>
         )}
       </View>
 
-      {/* Motivation */}
-      <View style={{ alignItems: 'center', marginTop: spacing.lg }}>
-        <Text
-          style={{
-            color: colors.text.secondary,
-            fontSize: typography.sizes.sm,
-            textAlign: 'center',
-          }}
-        >
-          {motivationText}
-        </Text>
-      </View>
-
-      <View style={{ flex: 1 }} />
-
       {/* Actions */}
-      <View style={{ gap: spacing.sm }}>
+      <View style={[styles.actions, { paddingBottom: insets.bottom + spacing.md }]}>
         {elapsedPct >= 50 && phase === 'running' && (
           <Button
             label={sessionHasQuiz ? 'Finish & Start Quiz' : 'Complete Mission Early'}
@@ -297,3 +267,65 @@ export default function MissionTimerScreen() {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: colors.bg.primary,
+  },
+  blob: {
+    position: 'absolute',
+  },
+  header: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md,
+    gap: 2,
+  },
+  missionLabel: {
+    color: colors.crystal.primary,
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.semibold,
+    letterSpacing: typography.tracking.widest,
+    textTransform: 'uppercase',
+  },
+  subjectName: {
+    color: colors.text.primary,
+    fontSize: typography.sizes.xl,
+    fontWeight: typography.weights.heavy,
+  },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xl,
+    paddingHorizontal: spacing.md,
+  },
+  motivation: {
+    color: colors.text.secondary,
+    fontSize: typography.sizes.sm,
+    textAlign: 'center',
+    lineHeight: 20,
+    maxWidth: 280,
+  },
+  quizBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    borderRadius: radius.full,
+    backgroundColor: colors.bg.elevated,
+    borderWidth: 1,
+    borderColor: colors.crystal.glow,
+  },
+  quizBadgeText: {
+    color: colors.crystal.primary,
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.semibold,
+  },
+  actions: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    gap: spacing.sm,
+  },
+});

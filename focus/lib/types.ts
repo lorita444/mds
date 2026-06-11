@@ -135,6 +135,7 @@ export type QuizQuestion = {
   options: string[] | null;
   correct_answer: string;
   order_index: number;
+  explanation?: string;
 };
 
 export type Wager = {

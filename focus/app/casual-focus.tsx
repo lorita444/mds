@@ -25,19 +25,18 @@ import { Button } from '../components/ui/Button';
 import { TimerDisplay } from '../components/ui/TimerDisplay';
 import { Card } from '../components/ui/Card';
 import { SkeletonBox } from '../components/ui/Skeleton';
-import { Modal } from '../components/ui/Modal';
-import { Input } from '../components/ui/Input';
+import { WheelPicker } from '../components/ui/WheelPicker';
 import type { Subject } from '../lib/types';
 
-const DURATIONS = [
-  { label: '15m', seconds: 900 },
-  { label: '25m', seconds: 1500 },
-  { label: '30m', seconds: 1800 },
-  { label: '45m', seconds: 2700 },
-  { label: '1h', seconds: 3600 },
-  { label: '1.5h', seconds: 5400 },
-  { label: '2h', seconds: 7200 },
-];
+const HOURS_VALUES = [0, 1, 2, 3, 4, 5];
+const MINUTES_VALUES = Array.from({ length: 60 }, (_, i) => i);
+
+function formatMinutes(minutes: number): string {
+  if (minutes < 60) return `${minutes}m`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
 
 const REWARD_TIERS = [
   { minSeconds: 0,    label: 'Crystals',         icon: 'diamond-outline' as const, color: colors.crystal.primary },
@@ -55,40 +54,21 @@ export default function CasualFocusScreen() {
   const { subjectId: paramSubjectId } = useLocalSearchParams<{ subjectId?: string }>();
 
   const [phase, setPhase] = useState<Phase>('idle');
-  const [selectedDuration, setSelectedDuration] = useState(DURATIONS[2]);
+  const [pickerHourIdx, setPickerHourIdx] = useState(0);
+  const [pickerMinuteIdx, setPickerMinuteIdx] = useState(30);
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(paramSubjectId ?? null);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [loadingSubjects, setLoadingSubjects] = useState(true);
-  const [remaining, setRemaining] = useState(DURATIONS[2].seconds);
+  const [remaining, setRemaining] = useState(30 * 60);
   const [completing, setCompleting] = useState(false);
 
-  const [showCustomModal, setShowCustomModal] = useState(false);
-  const [customMinutesInput, setCustomMinutesInput] = useState('');
-  const [customMinutesError, setCustomMinutesError] = useState('');
-
-  const handleSetCustomDuration = () => {
-    const mins = parseInt(customMinutesInput.trim(), 10);
-    if (isNaN(mins) || mins <= 0) {
-      setCustomMinutesError('Please enter a positive number of minutes.');
-      return;
-    }
-    if (mins > 720) {
-      setCustomMinutesError('Maximum duration is 720 minutes (12 hours).');
-      return;
-    }
-    setCustomMinutesError('');
-    setSelectedDuration({
-      label: `${mins}m`,
-      seconds: mins * 60,
-    });
-    setShowCustomModal(false);
-    setCustomMinutesInput('');
-  };
+  const plannedMinutes = HOURS_VALUES[pickerHourIdx] * 60 + MINUTES_VALUES[pickerMinuteIdx];
+  const plannedSeconds = plannedMinutes * 60;
 
   const sessionIdRef = useRef<string | null>(null);
   const sessionStartRef = useRef<number>(0);
   const endTimeRef = useRef<number>(0);
-  const plannedSecondsRef = useRef<number>(DURATIONS[2].seconds);
+  const plannedSecondsRef = useRef<number>(30 * 60);
   const completingRef = useRef(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pausedAtRef = useRef<number>(0);
@@ -103,8 +83,8 @@ export default function CasualFocusScreen() {
   }, [user?.id]);
 
   useEffect(() => {
-    if (phase === 'idle') setRemaining(selectedDuration.seconds);
-  }, [selectedDuration, phase]);
+    if (phase === 'idle') setRemaining(plannedSeconds);
+  }, [plannedSeconds, phase]);
 
   const doComplete = useCallback(async () => {
     if (!sessionIdRef.current || completingRef.current) return;
@@ -186,18 +166,18 @@ export default function CasualFocusScreen() {
       const session = await createStudySession({
         user_id: user.id,
         session_type: 'casual',
-        planned_seconds: selectedDuration.seconds,
+        planned_seconds: plannedSeconds,
         subject_id: selectedSubjectId ?? undefined,
       });
       if (!session) throw new Error('Failed to create session');
       const now = Date.now();
       sessionIdRef.current = session.id;
       sessionStartRef.current = now;
-      plannedSecondsRef.current = selectedDuration.seconds;
-      endTimeRef.current = now + selectedDuration.seconds * 1000;
+      plannedSecondsRef.current = plannedSeconds;
+      endTimeRef.current = now + plannedSeconds * 1000;
       completingRef.current = false;
       totalPausedMsRef.current = 0;
-      setRemaining(selectedDuration.seconds);
+      setRemaining(plannedSeconds);
       setPhase('running');
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Could not start session', 'error');
@@ -301,39 +281,26 @@ export default function CasualFocusScreen() {
 
         <View style={{ gap: spacing.sm }}>
           <Text style={styles.sectionLabel}>Duration</Text>
-          <View style={styles.durationGrid}>
-            {DURATIONS.map((d) => {
-              const active = selectedDuration.label === d.label;
-              return (
-                <Pressable
-                  key={d.label}
-                  onPress={() => setSelectedDuration(d)}
-                  style={[styles.durationChip, active && styles.durationChipActive]}
-                >
-                  <Text style={[styles.durationText, active && styles.durationTextActive]}>
-                    {d.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-            {/* Custom Duration Chip */}
-            {(() => {
-              const isCustomActive = !DURATIONS.some((d) => d.label === selectedDuration.label);
-              return (
-                <Pressable
-                  onPress={() => setShowCustomModal(true)}
-                  style={[
-                    styles.durationChip,
-                    isCustomActive && styles.durationChipActive,
-                    { backgroundColor: 'rgba(124,58,237,0.1)', borderColor: 'rgba(124,58,237,0.3)' }
-                  ]}
-                >
-                  <Text style={[styles.durationText, isCustomActive && styles.durationTextActive, { color: colors.cosmic.purpleLight }]}>
-                    {isCustomActive ? `Custom: ${selectedDuration.label}` : '+ Custom'}
-                  </Text>
-                </Pressable>
-              );
-            })()}
+          <View style={styles.pickerCard}>
+            <View style={styles.pickerRow}>
+              <WheelPicker
+                values={HOURS_VALUES.map(h => `${h}h`)}
+                selectedIndex={pickerHourIdx}
+                onChangeIndex={setPickerHourIdx}
+                width={110}
+              />
+              <Text style={styles.pickerColon}>:</Text>
+              <WheelPicker
+                values={MINUTES_VALUES.map(m => String(m).padStart(2, '0'))}
+                selectedIndex={pickerMinuteIdx}
+                onChangeIndex={setPickerMinuteIdx}
+                width={110}
+              />
+            </View>
+            <View style={styles.pickerTotalRow}>
+              <Ionicons name="time-outline" size={12} color={colors.text.muted} />
+              <Text style={styles.pickerTotal}>{formatMinutes(plannedMinutes)}</Text>
+            </View>
           </View>
         </View>
 
@@ -388,35 +355,11 @@ export default function CasualFocusScreen() {
         </Card>
 
         <Button
-          label={`Start ${selectedDuration.label} Session`}
+          label={`Start ${formatMinutes(plannedMinutes)} Session`}
           onPress={startSession}
           size="lg"
           fullWidth
         />
-
-        <Modal
-          visible={showCustomModal}
-          onClose={() => { setShowCustomModal(false); setCustomMinutesError(''); }}
-          title="Custom Duration"
-        >
-          <View style={{ paddingHorizontal: spacing.lg, gap: spacing.md, paddingBottom: spacing.md }}>
-            <Input
-              label="Duration in minutes"
-              placeholder="e.g. 50"
-              value={customMinutesInput}
-              onChangeText={(v) => { setCustomMinutesInput(v); setCustomMinutesError(''); }}
-              keyboardType="number-pad"
-              autoFocus
-              error={customMinutesError}
-            />
-            <Button
-              label="Set Duration"
-              onPress={handleSetCustomDuration}
-              fullWidth
-              size="lg"
-            />
-          </View>
-        </Modal>
       </ScrollView>
     );
   }
@@ -432,20 +375,40 @@ export default function CasualFocusScreen() {
   const isPaused = phase === 'paused';
 
   return (
-    <View
-      style={[
-        styles.screen,
-        {
-          paddingTop: insets.top + spacing.md,
-          paddingBottom: insets.bottom + spacing.xl,
-          paddingHorizontal: spacing.md,
-        },
-      ]}
-    >
-      {/* Header row */}
-      <View style={[styles.rowHeader, { marginBottom: spacing.lg }]}>
-        <View>
-          <Text style={styles.screenTitle}>Focus Mode</Text>
+    <View style={[styles.root, { paddingTop: insets.top }]}>
+      {/* Atmospheric background blobs */}
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        <View
+          style={[
+            styles.blob,
+            {
+              width: 320, height: 320, borderRadius: 160,
+              backgroundColor: colors.cosmic.purple,
+              opacity: 0.06 + elapsedPercent * 0.08,
+              top: -60, left: -80,
+            },
+          ]}
+        />
+        <View
+          style={[
+            styles.blob,
+            {
+              width: 200, height: 200, borderRadius: 100,
+              backgroundColor: colors.cosmic.purpleLight,
+              opacity: 0.04 + elapsedPercent * 0.05,
+              bottom: 80, right: -40,
+            },
+          ]}
+        />
+      </View>
+
+      {/* Header */}
+      <View style={[styles.timerHeader, { paddingTop: spacing.md }]}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+          <Text style={{ fontSize: 14 }}>⚡</Text>
+          <Text style={styles.casualLabel}>Casual Focus</Text>
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
           {selectedSubject && (
             <View style={styles.subjectPill}>
               <Text style={styles.subjectPillText}>
@@ -453,33 +416,29 @@ export default function CasualFocusScreen() {
               </Text>
             </View>
           )}
-        </View>
-        <View style={[styles.tierBadge, { borderColor: REWARD_TIERS[currentTierIndex].color + '55' }]}>
-          <Ionicons name={REWARD_TIERS[currentTierIndex].icon} size={12} color={REWARD_TIERS[currentTierIndex].color} />
-          <Text style={[styles.tierText, { color: REWARD_TIERS[currentTierIndex].color }]}>
-            {REWARD_TIERS[currentTierIndex].label}
-          </Text>
+          <View style={[styles.tierBadge, { borderColor: REWARD_TIERS[currentTierIndex].color + '55' }]}>
+            <Ionicons name={REWARD_TIERS[currentTierIndex].icon} size={12} color={REWARD_TIERS[currentTierIndex].color} />
+            <Text style={[styles.tierText, { color: REWARD_TIERS[currentTierIndex].color }]}>
+              {REWARD_TIERS[currentTierIndex].label}
+            </Text>
+          </View>
         </View>
       </View>
 
-      {/* Timer */}
-      <TimerDisplay
-        remainingSeconds={remaining}
-        totalSeconds={plannedSecondsRef.current}
-        label="Remaining"
-        size="lg"
-        paused={isPaused}
-      />
-
-      {/* Motivation */}
-      <View style={{ alignItems: 'center', marginTop: spacing.md }}>
-        <Text style={styles.motivationText}>{motivationText}</Text>
+      {/* Center — timer + motivation */}
+      <View style={styles.center}>
+        <TimerDisplay
+          remainingSeconds={remaining}
+          totalSeconds={plannedSecondsRef.current}
+          label="Remaining"
+          size="lg"
+          paused={isPaused}
+        />
+        <Text style={styles.motivation}>{motivationText}</Text>
       </View>
 
-      <View style={{ flex: 1 }} />
-
-      {/* Controls */}
-      <View style={{ gap: spacing.sm }}>
+      {/* Actions */}
+      <View style={[styles.actions, { paddingBottom: insets.bottom + spacing.md }]}>
         {elapsedPercent >= 50 && (
           <Button
             label="Complete Session"
@@ -490,7 +449,6 @@ export default function CasualFocusScreen() {
             fullWidth
           />
         )}
-
         {!completing && (
           <Button
             label={isPaused ? 'Resume Session' : 'Pause'}
@@ -500,12 +458,14 @@ export default function CasualFocusScreen() {
             fullWidth
           />
         )}
-
         {!completing && (
-          <Pressable onPress={confirmAbandon} style={styles.abandonRow}>
-            <Ionicons name="close-circle-outline" size={14} color={colors.text.muted} />
-            <Text style={styles.abandonText}>Abandon session</Text>
-          </Pressable>
+          <Button
+            label="Abandon Session"
+            variant="danger"
+            onPress={confirmAbandon}
+            size="lg"
+            fullWidth
+          />
         )}
       </View>
     </View>
@@ -531,21 +491,33 @@ const styles = StyleSheet.create({
     letterSpacing: typography.tracking.widest,
     textTransform: 'uppercase',
   },
-  durationGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
-  durationChip: {
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 2,
-    borderRadius: radius.md, backgroundColor: colors.bg.card,
+  pickerCard: {
+    backgroundColor: colors.bg.card,
+    borderRadius: radius.xl,
     borderWidth: 1, borderColor: colors.bg.cardBorder,
+    paddingTop: spacing.sm,
+    overflow: 'hidden',
   },
-  durationChipActive: {
-    backgroundColor: colors.cosmic.purple,
-    borderColor: 'rgba(167,139,250,0.5)',
-    shadowColor: colors.cosmic.purple,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.4, shadowRadius: 8, elevation: 6,
+  pickerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  pickerColon: {
+    color: colors.text.muted,
+    fontSize: typography.sizes.xxl,
+    fontWeight: typography.weights.bold,
+    marginHorizontal: spacing.xs,
+    paddingBottom: 4,
   },
-  durationText: { color: colors.text.secondary, fontWeight: typography.weights.medium, fontSize: typography.sizes.sm },
-  durationTextActive: { color: colors.text.primary, fontWeight: typography.weights.bold },
+  pickerTotalRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 4, paddingVertical: spacing.sm,
+    borderTopWidth: 1, borderTopColor: colors.bg.cardBorder,
+    marginTop: spacing.xs,
+  },
+  pickerTotal: {
+    color: colors.text.muted,
+    fontSize: typography.sizes.xs,
+    letterSpacing: typography.tracking.widest,
+    textTransform: 'uppercase',
+  },
   subjectChip: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
     paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
@@ -570,10 +542,40 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm, paddingVertical: 4,
   },
   tierText: { fontSize: typography.sizes.xs, fontWeight: typography.weights.semibold },
-  motivationText: { color: colors.text.secondary, fontSize: typography.sizes.sm, textAlign: 'center' },
-  abandonRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 5, paddingVertical: spacing.sm,
+  root: { flex: 1, backgroundColor: colors.bg.primary },
+  blob: { position: 'absolute' },
+  timerHeader: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md,
+    gap: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  abandonText: { color: colors.text.muted, fontSize: typography.sizes.sm },
+  casualLabel: {
+    color: colors.crystal.primary,
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.semibold,
+    letterSpacing: typography.tracking.widest,
+    textTransform: 'uppercase',
+  },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xl,
+    paddingHorizontal: spacing.md,
+  },
+  motivation: {
+    color: colors.text.secondary,
+    fontSize: typography.sizes.sm,
+    textAlign: 'center',
+    lineHeight: 20,
+    maxWidth: 280,
+  },
+  actions: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    gap: spacing.sm,
+  },
 });

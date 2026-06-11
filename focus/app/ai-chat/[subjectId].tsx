@@ -24,6 +24,7 @@ import {
   saveMessage,
 } from '../../lib/db';
 import { colors, spacing, typography, radius } from '../../utils/theme';
+import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { LoadingState } from '../../components/ui/LoadingState';
 import type { AIChatMessage } from '../../lib/types';
@@ -194,23 +195,16 @@ export default function AIChatScreen() {
       )}
 
       {/* Explain Course Button */}
-      <Pressable
-        onPress={handleExplainCourse}
-        disabled={explaining}
-        style={({ pressed }) => [
-          styles.explainBtn,
-          pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] },
-          explaining && { opacity: 0.55 },
-        ]}
-      >
-        {explaining
-          ? <ActivityIndicator size="small" color={colors.text.primary} />
-          : <Text style={styles.explainBtnIcon}>📖</Text>
-        }
-        <Text style={styles.explainBtnText}>
-          {explaining ? 'Se generează...' : 'Explică Cursul Complet'}
-        </Text>
-      </Pressable>
+      <View style={{ paddingHorizontal: spacing.md, paddingVertical: spacing.sm }}>
+        <Button
+          label="📖  Explică Cursul Complet"
+          loadingLabel="Se generează..."
+          onPress={handleExplainCourse}
+          loading={explaining}
+          disabled={explaining}
+          fullWidth
+        />
+      </View>
 
       {/* Messages */}
       <ScrollView
@@ -334,32 +328,6 @@ const styles = StyleSheet.create({
     padding: spacing.sm + 2,
   },
   infoText: { color: colors.status.warning, fontSize: typography.sizes.xs },
-  explainBtn: {
-    marginHorizontal: spacing.md,
-    marginVertical: spacing.sm,
-    backgroundColor: colors.cosmic.purple,
-    borderRadius: radius.lg,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    shadowColor: colors.cosmic.purple,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.45,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  explainBtnIcon: {
-    fontSize: typography.sizes.md,
-  },
-  explainBtnText: {
-    color: colors.text.primary,
-    fontSize: typography.sizes.base,
-    fontWeight: typography.weights.semibold,
-    letterSpacing: typography.tracking.wide,
-  },
   messageList: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,

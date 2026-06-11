@@ -390,8 +390,18 @@ export default function UniverseScreen() {
                   <Text style={{ color: colors.text.secondary, fontSize: typography.sizes.xs, fontWeight: typography.weights.semibold, letterSpacing: typography.tracking.widest, textTransform: 'uppercase' }}>
                     Recent Rewards
                   </Text>
-                  <Pressable onPress={() => router.push('/rewards-history' as never)}>
-                    <Text style={{ color: colors.cosmic.purpleLight, fontSize: typography.sizes.xs, fontWeight: typography.weights.bold }}>
+                  <Pressable
+                    onPress={() => router.push('/rewards-history' as never)}
+                    style={({ pressed }) => ({
+                      paddingHorizontal: spacing.sm,
+                      paddingVertical: 4,
+                      borderRadius: radius.full,
+                      borderWidth: 1,
+                      borderColor: colors.bg.cardBorder,
+                      backgroundColor: pressed ? colors.bg.elevated : 'transparent',
+                    })}
+                  >
+                    <Text style={{ color: colors.cosmic.purpleLight, fontSize: typography.sizes.xs, fontWeight: typography.weights.semibold }}>
                       View All ›
                     </Text>
                   </Pressable>

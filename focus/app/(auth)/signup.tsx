@@ -207,9 +207,19 @@ export default function SignupScreen() {
                   </Text>
                   <Pressable
                     onPress={() => router.replace('/(auth)/login' as never)}
-                    style={{ marginTop: 8 }}
+                    style={{
+                      marginTop: spacing.sm,
+                      alignSelf: 'flex-start',
+                      borderWidth: 1,
+                      borderColor: 'rgba(94,234,212,0.4)',
+                      borderRadius: radius.md,
+                      paddingHorizontal: spacing.md,
+                      paddingVertical: spacing.xs + 2,
+                    }}
                   >
-                    <Text style={{ color: '#5eead4', fontSize: 13, fontWeight: '700' }}>Go to Sign In →</Text>
+                    <Text style={{ color: '#5eead4', fontSize: typography.sizes.sm, fontWeight: typography.weights.semibold }}>
+                      Go to Sign In →
+                    </Text>
                   </Pressable>
                 </View>
               ) : null}
@@ -322,6 +332,7 @@ const styles = StyleSheet.create({
   },
   centerLink: {
     alignItems: 'center',
+    paddingVertical: spacing.xs,
   },
   secondaryLink: {
     color: colors.text.secondary,
@@ -330,5 +341,7 @@ const styles = StyleSheet.create({
   accentLink: {
     color: colors.cosmic.purpleLight,
     fontWeight: typography.weights.semibold,
+    textDecorationLine: 'underline',
+    textDecorationColor: colors.cosmic.purpleLight,
   },
 });

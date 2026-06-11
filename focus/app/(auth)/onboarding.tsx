@@ -140,11 +140,21 @@ export default function OnboardingScreen() {
       {/* Skip button */}
       <Pressable
         onPress={() => router.push('/(auth)/login' as never)}
-        style={{ alignSelf: 'flex-end', padding: spacing.md }}
+        style={({ pressed }) => ({
+          alignSelf: 'flex-end',
+          marginRight: spacing.md,
+          marginTop: spacing.xs,
+          paddingHorizontal: spacing.md,
+          paddingVertical: spacing.xs + 2,
+          borderRadius: radius.full,
+          borderWidth: 1,
+          borderColor: colors.bg.cardBorder,
+          backgroundColor: pressed ? colors.bg.elevated : 'transparent',
+        })}
       >
         <Text
           style={{
-            color: colors.text.muted,
+            color: colors.text.secondary,
             fontSize: typography.sizes.sm,
             fontWeight: typography.weights.medium,
           }}
@@ -255,15 +265,16 @@ export default function OnboardingScreen() {
         />
 
         {!isLast && (
-          <Pressable onPress={() => router.push('/(auth)/login' as never)}>
-            <Text
-              style={{
-                color: colors.text.muted,
-                fontSize: typography.sizes.sm,
-              }}
-            >
+          <Pressable onPress={() => router.push('/(auth)/login' as never)} style={{ paddingVertical: spacing.xs }}>
+            <Text style={{ color: colors.text.muted, fontSize: typography.sizes.sm }}>
               Already have an account?{' '}
-              <Text style={{ color: colors.text.accent }}>Sign in</Text>
+              <Text style={{
+                color: colors.text.accent,
+                textDecorationLine: 'underline',
+                textDecorationColor: colors.text.accent,
+              }}>
+                Sign in
+              </Text>
             </Text>
           </Pressable>
         )}

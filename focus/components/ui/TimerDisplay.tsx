@@ -1,13 +1,10 @@
-import { View, Text, StyleSheet } from 'react-native';
-import { colors, typography, spacing, radius } from '../../utils/theme';
+import { useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, Animated } from 'react-native';
+import { colors, typography } from '../../utils/theme';
 
-type TimerDisplayProps = {
-  remainingSeconds: number;
-  totalSeconds: number;
-  label?: string;
-  size?: 'sm' | 'md' | 'lg';
-  paused?: boolean;
-};
+const RING_SIZE = 224;
+const STROKE = 18;
+const INNER_SIZE = RING_SIZE - STROKE * 2;
 
 function formatClock(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -25,11 +22,13 @@ function progressColor(p: number): string {
   return colors.cosmic.goldLight;
 }
 
-function progressBg(p: number): string {
-  if (p < 0.5) return 'rgba(124,58,237,0.09)';
-  if (p < 0.8) return 'rgba(13,148,136,0.09)';
-  return 'rgba(217,119,6,0.09)';
-}
+type TimerDisplayProps = {
+  remainingSeconds: number;
+  totalSeconds: number;
+  label?: string;
+  size?: 'sm' | 'md' | 'lg';
+  paused?: boolean;
+};
 
 export function TimerDisplay({
   remainingSeconds,
@@ -39,117 +38,219 @@ export function TimerDisplay({
   paused = false,
 }: TimerDisplayProps) {
   const progress = totalSeconds > 0 ? 1 - remainingSeconds / totalSeconds : 0;
-  const progressPercent = Math.round(progress * 100);
   const accent = paused ? colors.text.muted : progressColor(progress);
-  const bg = paused ? 'rgba(71,85,105,0.07)' : progressBg(progress);
+  const progressPct = Math.round(progress * 100);
 
-  const clockSize =
-    size === 'lg' ? typography.sizes.display
-    : size === 'md' ? typography.sizes.xxl
-    : typography.sizes.xl;
+  const animProg = useRef(new Animated.Value(progress)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const pulseRef = useRef<Animated.CompositeAnimation | null>(null);
+
+  useEffect(() => {
+    Animated.timing(animProg, {
+      toValue: progress,
+      duration: 800,
+      useNativeDriver: true,
+    }).start();
+  }, [progress]);
+
+  useEffect(() => {
+    if (paused) {
+      pulseRef.current?.stop();
+      pulseAnim.setValue(1);
+      return;
+    }
+    pulseRef.current = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1.07, duration: 2000, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 2000, useNativeDriver: true }),
+      ])
+    );
+    pulseRef.current.start();
+    return () => { pulseRef.current?.stop(); };
+  }, [paused]);
+
+  // Right half: sweeps 12→6 o'clock as progress 0→50%
+  const rightRotation = animProg.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: ['-180deg', '0deg', '0deg'],
+    extrapolate: 'clamp',
+  });
+
+  // Left half: sweeps 6→12 o'clock as progress 50→100%
+  const leftRotation = animProg.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: ['180deg', '180deg', '360deg'],
+    extrapolate: 'clamp',
+  });
+
+  const clockFontSize = size === 'lg' ? 52 : size === 'md' ? 42 : 34;
+  const glowBaseOpacity = paused ? 0.06 : 0.15 + progress * 0.25;
+  const glowInnerOpacity = paused ? 0.10 : 0.22 + progress * 0.3;
 
   return (
-    <View
-      style={[
-        styles.container,
-        {
-          backgroundColor: bg,
-          borderColor: `${accent}28`,
-          shadowColor: accent,
-          shadowOpacity: paused ? 0.04 : 0.16 + progress * 0.2,
-          shadowRadius: 22,
-          elevation: 10,
-        },
-      ]}
-    >
-      {/* Top edge glow — brightens as progress increases */}
-      <View
+    <View style={styles.wrapper}>
+      {/* Outer atmospheric glow */}
+      <Animated.View
         style={[
-          styles.topEdge,
-          { backgroundColor: accent, opacity: paused ? 0.2 : 0.45 + progress * 0.55 },
+          styles.glowOuter,
+          {
+            backgroundColor: accent,
+            opacity: glowBaseOpacity,
+            transform: [{ scale: pulseAnim }],
+          },
+        ]}
+      />
+      {/* Inner glow */}
+      <Animated.View
+        style={[
+          styles.glowInner,
+          {
+            backgroundColor: accent,
+            opacity: glowInnerOpacity,
+            transform: [{ scale: pulseAnim }],
+          },
         ]}
       />
 
-      {/* Status label */}
-      <Text style={styles.label}>
-        {paused ? 'PAUSED' : label.toUpperCase()}
-      </Text>
+      {/* Ring */}
+      <View style={{ width: RING_SIZE, height: RING_SIZE }}>
+        {/* Track (dim background ring) */}
+        <View
+          style={[
+            styles.ringTrack,
+            { width: RING_SIZE, height: RING_SIZE, borderRadius: RING_SIZE / 2, borderWidth: STROKE },
+          ]}
+        />
 
-      {/* Clock digits */}
-      <Text
-        style={[
-          styles.clock,
-          { fontSize: clockSize, color: paused ? colors.text.muted : colors.text.primary },
-        ]}
-      >
-        {formatClock(remainingSeconds)}
-      </Text>
+        {/* Right half clip — reveals first 50% of arc */}
+        <View style={[styles.halfClipRight, { width: RING_SIZE / 2, height: RING_SIZE }]}>
+          <Animated.View
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: -(RING_SIZE / 2),
+              width: RING_SIZE,
+              height: RING_SIZE,
+              borderRadius: RING_SIZE / 2,
+              borderWidth: STROKE,
+              borderColor: accent,
+              transform: [{ rotate: rightRotation }],
+            }}
+          />
+        </View>
 
-      {/* Progress track */}
-      <View style={styles.track}>
-        <View style={[styles.fill, { width: `${progressPercent}%`, backgroundColor: accent }]} />
-      </View>
+        {/* Left half clip — reveals 50-100% of arc */}
+        <View style={[styles.halfClipLeft, { width: RING_SIZE / 2, height: RING_SIZE }]}>
+          <Animated.View
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: RING_SIZE,
+              height: RING_SIZE,
+              borderRadius: RING_SIZE / 2,
+              borderWidth: STROKE,
+              borderColor: accent,
+              transform: [{ rotate: leftRotation }],
+            }}
+          />
+        </View>
 
-      {/* Percentage badge */}
-      <View style={[styles.pctBadge, { borderColor: `${accent}28`, backgroundColor: `${accent}12` }]}>
-        <Text style={[styles.pctText, { color: accent }]}>
-          {progressPercent}% complete
-        </Text>
+        {/* Inner mask — creates the donut hole */}
+        <View
+          style={[
+            styles.innerMask,
+            { width: INNER_SIZE, height: INNER_SIZE, borderRadius: INNER_SIZE / 2 },
+          ]}
+        />
+
+        {/* Center content */}
+        <View
+          style={[
+            styles.centerContent,
+            { width: INNER_SIZE, height: INNER_SIZE, borderRadius: INNER_SIZE / 2 },
+          ]}
+        >
+          <Text style={styles.label}>{paused ? 'PAUSED' : label.toUpperCase()}</Text>
+          <Text
+            style={[
+              styles.clock,
+              { fontSize: clockFontSize, color: paused ? colors.text.muted : colors.text.primary },
+            ]}
+          >
+            {formatClock(remainingSeconds)}
+          </Text>
+          <Text style={[styles.pct, { color: accent }]}>{progressPct}%</Text>
+        </View>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    borderWidth: 1,
-    borderRadius: radius.xxl,
-    paddingVertical: spacing.xl + 4,
-    paddingHorizontal: spacing.xl,
+  wrapper: {
     alignItems: 'center',
-    gap: spacing.md,
-    shadowOffset: { width: 0, height: 6 },
-    overflow: 'hidden',
+    justifyContent: 'center',
   },
-  topEdge: {
+  glowOuter: {
+    position: 'absolute',
+    width: RING_SIZE + 88,
+    height: RING_SIZE + 88,
+    borderRadius: (RING_SIZE + 88) / 2,
+  },
+  glowInner: {
+    position: 'absolute',
+    width: RING_SIZE + 36,
+    height: RING_SIZE + 36,
+    borderRadius: (RING_SIZE + 36) / 2,
+  },
+  ringTrack: {
     position: 'absolute',
     top: 0,
     left: 0,
-    right: 0,
-    height: 3,
-    borderTopLeftRadius: radius.xxl,
-    borderTopRightRadius: radius.xxl,
+    borderColor: 'rgba(255,255,255,0.07)',
+  },
+  halfClipRight: {
+    position: 'absolute',
+    top: 0,
+    left: RING_SIZE / 2,
+    overflow: 'hidden',
+  },
+  halfClipLeft: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    overflow: 'hidden',
+  },
+  innerMask: {
+    position: 'absolute',
+    top: STROKE,
+    left: STROKE,
+    backgroundColor: colors.bg.primary,
+  },
+  centerContent: {
+    position: 'absolute',
+    top: STROKE,
+    left: STROKE,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
   },
   label: {
     color: colors.text.muted,
-    fontSize: typography.sizes.xs,
-    fontWeight: typography.weights.semibold,
-    letterSpacing: typography.tracking.widest,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 2.5,
+    textTransform: 'uppercase',
   },
   clock: {
-    fontWeight: typography.weights.heavy,
-    letterSpacing: typography.tracking.tight,
+    fontWeight: '800',
+    letterSpacing: -1,
     fontVariant: ['tabular-nums'],
   },
-  track: {
-    width: '100%',
-    height: 6,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: radius.full,
-    overflow: 'hidden',
-  },
-  fill: {
-    height: '100%',
-    borderRadius: radius.full,
-  },
-  pctBadge: {
-    borderWidth: 1,
-    borderRadius: radius.full,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 4,
-  },
-  pctText: {
-    fontSize: typography.sizes.sm,
-    fontWeight: typography.weights.semibold,
+  pct: {
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0.5,
   },
 });

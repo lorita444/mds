@@ -27,6 +27,36 @@ import { LoadingState } from '../../components/ui/LoadingState';
 import { ErrorState } from '../../components/ui/ErrorState';
 import type { Flashcard, Chapter } from '../../lib/types';
 
+const STATUS_CONFIG = {
+  new: {
+    label: 'New',
+    icon: '✦',
+    color: colors.cosmic.purpleLight,
+    faint: colors.cosmic.purpleFaint,
+    border: colors.cosmic.purpleGlow,
+    cardBorder: colors.cosmic.purpleGlow,
+    cardBg: colors.bg.elevated,
+  },
+  known: {
+    label: 'Known',
+    icon: '✓',
+    color: colors.status.success,
+    faint: colors.status.successFaint,
+    border: 'rgba(34,197,94,0.45)',
+    cardBorder: 'rgba(34,197,94,0.55)',
+    cardBg: 'rgba(34,197,94,0.04)',
+  },
+  needs_review: {
+    label: 'Review',
+    icon: '↻',
+    color: colors.status.warning,
+    faint: colors.status.warningFaint,
+    border: 'rgba(245,158,11,0.45)',
+    cardBorder: 'rgba(245,158,11,0.55)',
+    cardBg: 'rgba(245,158,11,0.04)',
+  },
+};
+
 // Flip card component
 function FlashCard({ card, onKnown, onNeedsReview, onDelete }: {
   card: Flashcard;
@@ -55,62 +85,65 @@ function FlashCard({ card, onKnown, onNeedsReview, onDelete }: {
     outputRange: ['180deg', '360deg'],
   });
 
-  const statusColors = {
-    new: colors.text.muted,
-    known: colors.status.success,
-    needs_review: colors.status.warning,
-  };
+  const st = STATUS_CONFIG[card.review_status];
+  const diffColor =
+    card.difficulty === 'easy' ? colors.status.success
+    : card.difficulty === 'hard' ? colors.status.error
+    : colors.status.warning;
+  const diffFaint =
+    card.difficulty === 'easy' ? colors.status.successFaint
+    : card.difficulty === 'hard' ? colors.status.errorFaint
+    : colors.status.warningFaint;
 
   return (
     <View style={{ gap: spacing.sm }}>
-      {/* Status badge */}
+      {/* Header row: status badge + difficulty + delete */}
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-        <View style={{ flexDirection: 'row', gap: spacing.xs }}>
-          <View
-            style={{
-              backgroundColor:
-                card.difficulty === 'easy'
-                  ? colors.status.successFaint
-                  : card.difficulty === 'hard'
-                  ? colors.status.errorFaint
-                  : colors.status.warningFaint,
-              borderRadius: radius.full,
-              paddingHorizontal: 8,
-              paddingVertical: 3,
-            }}
-          >
-            <Text
-              style={{
-                color:
-                  card.difficulty === 'easy'
-                    ? colors.status.success
-                    : card.difficulty === 'hard'
-                    ? colors.status.error
-                    : colors.status.warning,
-                fontSize: typography.sizes.xs,
-                fontWeight: typography.weights.semibold,
-              }}
-            >
+        {/* Status pill — prominent, filled */}
+        <View style={{ flexDirection: 'row', gap: spacing.xs, alignItems: 'center' }}>
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 5,
+            backgroundColor: st.faint,
+            borderWidth: 1,
+            borderColor: st.border,
+            borderRadius: radius.full,
+            paddingHorizontal: spacing.sm + 2,
+            paddingVertical: 5,
+          }}>
+            <Text style={{ color: st.color, fontSize: 12, fontWeight: '700' }}>{st.icon}</Text>
+            <Text style={{ color: st.color, fontSize: typography.sizes.xs, fontWeight: typography.weights.bold }}>
+              {st.label}
+            </Text>
+          </View>
+          {/* Difficulty pill */}
+          <View style={{
+            backgroundColor: diffFaint,
+            borderRadius: radius.full,
+            paddingHorizontal: spacing.sm,
+            paddingVertical: 5,
+          }}>
+            <Text style={{ color: diffColor, fontSize: typography.sizes.xs, fontWeight: typography.weights.semibold, textTransform: 'capitalize' }}>
               {card.difficulty}
             </Text>
           </View>
-          <View
-            style={{
-              backgroundColor: colors.bg.card,
-              borderRadius: radius.full,
-              paddingHorizontal: 8,
-              paddingVertical: 3,
-              borderWidth: 1,
-              borderColor: statusColors[card.review_status] + '44',
-            }}
-          >
-            <Text style={{ color: statusColors[card.review_status], fontSize: typography.sizes.xs, fontWeight: typography.weights.semibold }}>
-              {card.review_status === 'needs_review' ? 'Review' : card.review_status}
-            </Text>
-          </View>
         </View>
-        <Pressable onPress={onDelete}>
-          <Text style={{ color: colors.text.muted, fontSize: 16 }}>✕</Text>
+
+        <Pressable
+          onPress={onDelete}
+          style={({ pressed }) => ({
+            width: 30,
+            height: 30,
+            borderRadius: radius.full,
+            borderWidth: 1,
+            borderColor: pressed ? colors.status.error : colors.bg.cardBorder,
+            backgroundColor: pressed ? colors.status.errorFaint : colors.bg.elevated,
+            alignItems: 'center',
+            justifyContent: 'center',
+          })}
+        >
+          <Text style={{ color: colors.text.muted, fontSize: 13 }}>✕</Text>
         </Pressable>
       </View>
 
@@ -125,15 +158,24 @@ function FlashCard({ card, onKnown, onNeedsReview, onDelete }: {
               height: '100%',
               backfaceVisibility: 'hidden',
               transform: [{ rotateY: frontInterpolate }],
-              backgroundColor: colors.bg.elevated,
+              backgroundColor: st.cardBg,
               borderWidth: 1.5,
-              borderColor: colors.cosmic.purpleGlow,
+              borderColor: st.cardBorder,
               borderRadius: radius.xl,
-              padding: spacing.lg,
+              overflow: 'hidden',
               justifyContent: 'center',
               alignItems: 'center',
+              padding: spacing.lg,
             }}
           >
+            {/* Top edge accent strip */}
+            <View style={{
+              position: 'absolute',
+              top: 0, left: 0, right: 0,
+              height: 3,
+              backgroundColor: st.color,
+              opacity: 0.7,
+            }} />
             <Text style={{ color: colors.text.muted, fontSize: typography.sizes.xs, letterSpacing: 2, textTransform: 'uppercase', marginBottom: spacing.sm }}>
               Question
             </Text>
@@ -153,15 +195,23 @@ function FlashCard({ card, onKnown, onNeedsReview, onDelete }: {
               height: '100%',
               backfaceVisibility: 'hidden',
               transform: [{ rotateY: backInterpolate }],
-              backgroundColor: colors.bg.card,
+              backgroundColor: st.cardBg,
               borderWidth: 1.5,
-              borderColor: colors.cosmic.teal,
+              borderColor: st.cardBorder,
               borderRadius: radius.xl,
-              padding: spacing.lg,
+              overflow: 'hidden',
               justifyContent: 'center',
               alignItems: 'center',
+              padding: spacing.lg,
             }}
           >
+            <View style={{
+              position: 'absolute',
+              top: 0, left: 0, right: 0,
+              height: 3,
+              backgroundColor: st.color,
+              opacity: 0.7,
+            }} />
             <Text style={{ color: colors.text.muted, fontSize: typography.sizes.xs, letterSpacing: 2, textTransform: 'uppercase', marginBottom: spacing.sm }}>
               Answer
             </Text>
@@ -172,41 +222,57 @@ function FlashCard({ card, onKnown, onNeedsReview, onDelete }: {
         </View>
       </Pressable>
 
-      {/* Review buttons (only when flipped) */}
+      {/* Review buttons — only when flipped */}
       {flipped && (
         <View style={{ flexDirection: 'row', gap: spacing.sm }}>
           <Pressable
             onPress={onNeedsReview}
             style={({ pressed }) => ({
               flex: 1,
-              backgroundColor: colors.status.warningFaint,
-              borderWidth: 1,
-              borderColor: 'rgba(245,158,11,0.3)',
+              backgroundColor: pressed ? 'rgba(245,158,11,0.22)' : colors.status.warningFaint,
+              borderWidth: 1.5,
+              borderColor: pressed ? colors.status.warning : 'rgba(245,158,11,0.4)',
               borderRadius: radius.lg,
-              padding: spacing.md,
+              paddingVertical: spacing.md + 2,
+              paddingHorizontal: spacing.md,
               alignItems: 'center',
-              opacity: pressed ? 0.75 : 1,
+              gap: 4,
+              transform: [{ scale: pressed ? 0.97 : 1 }],
+              shadowColor: colors.status.warning,
+              shadowOpacity: pressed ? 0.3 : 0,
+              shadowRadius: 8,
+              shadowOffset: { width: 0, height: 2 },
+              elevation: pressed ? 4 : 0,
             })}
           >
-            <Text style={{ color: colors.status.warning, fontWeight: typography.weights.semibold, fontSize: typography.sizes.sm }}>
-              🔄 Review again
+            <Text style={{ fontSize: 18 }}>↻</Text>
+            <Text style={{ color: colors.status.warning, fontWeight: typography.weights.bold, fontSize: typography.sizes.sm }}>
+              Review Again
             </Text>
           </Pressable>
           <Pressable
             onPress={onKnown}
             style={({ pressed }) => ({
               flex: 1,
-              backgroundColor: colors.status.successFaint,
-              borderWidth: 1,
-              borderColor: 'rgba(34,197,94,0.3)',
+              backgroundColor: pressed ? 'rgba(34,197,94,0.22)' : colors.status.successFaint,
+              borderWidth: 1.5,
+              borderColor: pressed ? colors.status.success : 'rgba(34,197,94,0.4)',
               borderRadius: radius.lg,
-              padding: spacing.md,
+              paddingVertical: spacing.md + 2,
+              paddingHorizontal: spacing.md,
               alignItems: 'center',
-              opacity: pressed ? 0.75 : 1,
+              gap: 4,
+              transform: [{ scale: pressed ? 0.97 : 1 }],
+              shadowColor: colors.status.success,
+              shadowOpacity: pressed ? 0.3 : 0,
+              shadowRadius: 8,
+              shadowOffset: { width: 0, height: 2 },
+              elevation: pressed ? 4 : 0,
             })}
           >
-            <Text style={{ color: colors.status.success, fontWeight: typography.weights.semibold, fontSize: typography.sizes.sm }}>
-              ✓ I know this
+            <Text style={{ fontSize: 18 }}>✓</Text>
+            <Text style={{ color: colors.status.success, fontWeight: typography.weights.bold, fontSize: typography.sizes.sm }}>
+              I Know This
             </Text>
           </Pressable>
         </View>
@@ -255,16 +321,13 @@ export default function FlashcardsScreen() {
 
   const handleGenerate = async () => {
     if (!subjectId || !user?.id) return;
-    console.log('[Flashcards] handleGenerate called', { subjectId, selectedChapterId, userId: user.id });
     setGenerating(true);
     setShowGenerateModal(false);
     try {
       const saved = await generateFlashcardsAI(subjectId, selectedChapterId, 10);
-      console.log('[Flashcards] Generated successfully:', saved?.length, 'cards');
       setCards((prev) => [...saved, ...prev]);
       Alert.alert('Done', `${saved.length} flashcards generated!`);
     } catch (e) {
-      console.error('[Flashcards] Generation error:', e);
       Alert.alert('Generation failed', e instanceof Error ? e.message : 'Could not generate flashcards');
     } finally {
       setGenerating(false);
@@ -302,8 +365,23 @@ export default function FlashcardsScreen() {
     >
       {/* Header */}
       <View style={{ gap: spacing.xs }}>
-        <Pressable onPress={() => router.back()}>
-          <Text style={{ color: colors.text.muted, fontSize: typography.sizes.sm }}>‹ Back</Text>
+        <Pressable
+          onPress={() => router.back()}
+          style={({ pressed }) => ({
+            alignSelf: 'flex-start',
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+            paddingHorizontal: spacing.sm,
+            paddingVertical: 6,
+            borderRadius: radius.md,
+            borderWidth: 1,
+            borderColor: colors.bg.cardBorder,
+            backgroundColor: pressed ? colors.bg.elevated : colors.bg.card,
+          })}
+        >
+          <Text style={{ color: colors.text.secondary, fontSize: typography.sizes.sm }}>‹</Text>
+          <Text style={{ color: colors.text.secondary, fontSize: typography.sizes.sm }}>Back</Text>
         </Pressable>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <Text style={{ color: colors.text.primary, fontSize: typography.sizes.xl, fontWeight: typography.weights.heavy }}>

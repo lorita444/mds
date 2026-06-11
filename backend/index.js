@@ -1632,8 +1632,9 @@ Reguli:
 - Folosește tipuri mixte: multiple_choice (cu 4 opțiuni), true_false, short_answer
 - Pentru multiple_choice: exact 4 opțiuni, correct_answer = una dintre ele
 - Pentru true_false: options = ["Adevărat","Fals"], correct_answer = unul dintre ele
-- Pentru short_answer: options = null
+- Pentru short_answer: options = null, correct_answer = răspuns scurt (max 10 cuvinte)
 - Acoperă conceptele principale din materiale
+- explanation: 1-2 propoziții care explică DE CE răspunsul este corect
 - Limba: aceeași ca materialele`;
 
     const quizSchema = {
@@ -1648,8 +1649,9 @@ Reguli:
               question_type: { type: 'string', enum: ['multiple_choice', 'true_false', 'short_answer'] },
               options: { type: ['array', 'null'], items: { type: 'string' } },
               correct_answer: { type: 'string' },
+              explanation: { type: 'string' },
             },
-            required: ['question_text', 'question_type', 'options', 'correct_answer'],
+            required: ['question_text', 'question_type', 'options', 'correct_answer', 'explanation'],
             additionalProperties: false,
           },
         },

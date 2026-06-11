@@ -7,7 +7,10 @@ import {
   Pressable,
   Alert,
   ActivityIndicator,
+  StyleSheet,
+  Dimensions,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { AI_AVATAR } from '../utils/assets';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,12 +26,16 @@ import {
 } from '../lib/db';
 import { estimateStudyDuration } from '../lib/ollama';
 import { colors, spacing, typography, radius } from '../utils/theme';
+
+const { width: SCREEN_W } = Dimensions.get('window');
+const CARD_GAP = spacing.sm;
+const CARD_W = (SCREEN_W - spacing.md * 2 - CARD_GAP) / 2;
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { LoadingState } from '../components/ui/LoadingState';
-import { Modal } from '../components/ui/Modal';
-import { Input } from '../components/ui/Input';
+import { WheelPicker } from '../components/ui/WheelPicker';
 import type { Subject, Chapter, UniverseItem } from '../lib/types';
+
 
 function formatMinutes(minutes: number): string {
   if (minutes < 60) return `${minutes}m`;
@@ -53,30 +60,24 @@ export default function MissionSetupScreen() {
   const [selectedChapterIds, setSelectedChapterIds] = useState<Set<string>>(new Set());
   const [universeItems, setUniverseItems] = useState<UniverseItem[]>([]);
 
+  const HOURS_VALUES = [0, 1, 2, 3, 4, 5];
+  const MINUTES_VALUES = Array.from({ length: 60 }, (_, i) => i); // 0–59
+
   const [estimating, setEstimating] = useState(false);
   const [estimatedMinutes, setEstimatedMinutes] = useState<number | null>(null);
   const [estimateReasoning, setEstimateReasoning] = useState('');
-  const [customMinutes, setCustomMinutes] = useState<number | null>(null);
 
-  const [showCustomModal, setShowCustomModal] = useState(false);
-  const [customMinutesInput, setCustomMinutesInput] = useState('');
-  const [customMinutesError, setCustomMinutesError] = useState('');
+  // Default: 0h 45min
+  const [pickerHourIdx, setPickerHourIdx] = useState(0);
+  const [pickerMinuteIdx, setPickerMinuteIdx] = useState(45);
 
-  const handleSetCustomDuration = () => {
-    const mins = parseInt(customMinutesInput.trim(), 10);
-    if (isNaN(mins) || mins <= 0) {
-      setCustomMinutesError('Please enter a positive number of minutes.');
-      return;
-    }
-    if (mins > 720) {
-      setCustomMinutesError('Maximum duration is 720 minutes (12 hours).');
-      return;
-    }
-    setCustomMinutesError('');
-    setCustomMinutes(mins);
-    setShowCustomModal(false);
-    setCustomMinutesInput('');
-  };
+  useEffect(() => {
+    if (estimatedMinutes === null) return;
+    const h = Math.min(5, Math.floor(estimatedMinutes / 60));
+    const m = Math.min(59, estimatedMinutes % 60);
+    setPickerHourIdx(h);
+    setPickerMinuteIdx(m);
+  }, [estimatedMinutes]);
 
   const [withQuiz, setWithQuiz] = useState(false);
   const [wagerType, setWagerType] = useState<'none' | 'crystals' | 'item'>('none');
@@ -143,7 +144,6 @@ export default function MissionSetupScreen() {
       );
       setEstimatedMinutes(minutes);
       setEstimateReasoning(reasoning);
-      setCustomMinutes(null);
     } catch (e) {
       Alert.alert('Estimate failed', e instanceof Error ? e.message : 'Try again');
     } finally {
@@ -151,7 +151,8 @@ export default function MissionSetupScreen() {
     }
   }, [selectedChapterIds, selectedSubjectId, subjects]);
 
-  const plannedSeconds = (customMinutes ?? estimatedMinutes ?? 45) * 60;
+  const plannedMinutes = HOURS_VALUES[pickerHourIdx] * 60 + MINUTES_VALUES[pickerMinuteIdx];
+  const plannedSeconds = plannedMinutes * 60;
   const selectedSubject = subjects.find((s) => s.id === selectedSubjectId);
 
   const canLaunch =
@@ -225,93 +226,62 @@ export default function MissionSetupScreen() {
 
   if (loading) return <LoadingState message="Loading..." />;
 
-  const durationOptions = [
-    { minutes: 25,  label: 'Sprint',     icon: '⚡' },
-    { minutes: 45,  label: 'Focus',      icon: '🎯' },
-    { minutes: 60,  label: 'Session',    icon: '📚' },
-    { minutes: 90,  label: 'Deep Work',  icon: '🔥' },
-    { minutes: 120, label: 'Marathon',   icon: '🚀' },
-  ];
+  const launchLabel = selectedSubject
+    ? `🚀  ${selectedSubject.emoji} ${selectedSubject.name} · ${formatMinutes(plannedMinutes)}`
+    : '🚀  Launch Mission';
 
   return (
     <ScrollView
-      style={{ flex: 1, backgroundColor: colors.bg.primary }}
-      contentContainerStyle={{
-        paddingTop: insets.top + spacing.md,
-        paddingBottom: insets.bottom + spacing.xl,
-        paddingHorizontal: spacing.md,
-        gap: spacing.lg,
-      }}
+      style={styles.screen}
+      contentContainerStyle={[
+        styles.content,
+        { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + spacing.xl },
+      ]}
       showsVerticalScrollIndicator={false}
     >
-      {/* Header */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-        <Pressable onPress={() => router.back()}>
-          <Text style={{ color: colors.text.muted, fontSize: typography.sizes.lg }}>‹</Text>
-        </Pressable>
-        <Text
-          style={{
-            color: colors.text.primary,
-            fontSize: typography.sizes.xl,
-            fontWeight: typography.weights.heavy,
-          }}
+      {/* ── Header ── */}
+      <View style={styles.header}>
+        <Pressable
+          onPress={() => router.back()}
+          style={({ pressed }) => [styles.backBtn, pressed && { backgroundColor: colors.bg.elevated }]}
         >
-          Mission Setup
-        </Text>
+          <Ionicons name="chevron-back" size={20} color={colors.text.secondary} />
+        </Pressable>
+        <Text style={styles.pageTitle}>Mission Setup</Text>
       </View>
 
-      {/* Subject picker */}
+      {/* ── Subject ── */}
       {!paramSubjectId && (
-        <View style={{ gap: spacing.sm }}>
-          <Text
-            style={{
-              color: colors.text.secondary,
-              fontSize: typography.sizes.xs,
-              fontWeight: typography.weights.semibold,
-              letterSpacing: typography.tracking.widest,
-              textTransform: 'uppercase',
-            }}
-          >
-            Subject
-          </Text>
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Choose subject</Text>
           {subjects.length === 0 ? (
-            <Card variant="flat" padding={spacing.md}>
-              <Text style={{ color: colors.text.muted, fontSize: typography.sizes.sm, textAlign: 'center' }}>
-                No subjects yet — create one in Portfolio first.
-              </Text>
-            </Card>
+            <Text style={styles.hint}>No subjects yet — create one in Portfolio first.</Text>
           ) : (
-            <View style={{ gap: spacing.xs }}>
+            <View style={styles.subjectGrid}>
               {subjects.map((s) => {
                 const active = selectedSubjectId === s.id;
                 return (
                   <Pressable
                     key={s.id}
                     onPress={() => setSelectedSubjectId(s.id)}
-                    style={({ pressed }) => ({
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: spacing.sm,
-                      padding: spacing.md,
-                      borderRadius: radius.md,
-                      backgroundColor: active ? colors.cosmic.purpleFaint : colors.bg.card,
-                      borderWidth: 1,
-                      borderColor: active ? colors.cosmic.purpleGlow : colors.bg.cardBorder,
-                      opacity: pressed ? 0.8 : 1,
-                    })}
+                    style={({ pressed }) => [
+                      styles.subjectCard,
+                      active && styles.subjectCardActive,
+                      pressed && !active && { opacity: 0.7 },
+                    ]}
                   >
-                    <Text style={{ fontSize: 20 }}>{s.emoji}</Text>
+                    {active && (
+                      <View style={styles.subjectCheck}>
+                        <Ionicons name="checkmark" size={10} color="#fff" />
+                      </View>
+                    )}
+                    <Text style={styles.subjectEmoji}>{s.emoji}</Text>
                     <Text
-                      style={{
-                        color: colors.text.primary,
-                        fontSize: typography.sizes.sm,
-                        fontWeight: active ? typography.weights.semibold : typography.weights.regular,
-                        flex: 1,
-                      }}
+                      style={[styles.subjectName, active && styles.subjectNameActive]}
+                      numberOfLines={2}
                     >
                       {s.name}
                     </Text>
-                    {active && <Text style={{ color: colors.cosmic.purpleLight, fontSize: 16 }}>✓</Text>}
                   </Pressable>
                 );
               })}
@@ -320,89 +290,37 @@ export default function MissionSetupScreen() {
         </View>
       )}
 
-      {/* Selected subject display (when pre-selected from param) */}
+      {/* Pre-selected subject */}
       {paramSubjectId && selectedSubject && (
-        <Card variant="elevated" padding={spacing.md}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-            <Text style={{ fontSize: 24 }}>{selectedSubject.emoji}</Text>
-            <Text
-              style={{
-                color: colors.text.primary,
-                fontSize: typography.sizes.md,
-                fontWeight: typography.weights.semibold,
-              }}
-            >
-              {selectedSubject.name}
-            </Text>
-          </View>
-        </Card>
+        <View style={styles.subjectBanner}>
+          <Text style={{ fontSize: 28 }}>{selectedSubject.emoji}</Text>
+          <Text style={styles.subjectBannerName}>{selectedSubject.name}</Text>
+        </View>
       )}
 
-      {/* Chapter selection */}
+      {/* ── Chapters ── */}
       {selectedSubjectId && (
-        <View style={{ gap: spacing.sm }}>
-          <Text
-            style={{
-              color: colors.text.secondary,
-              fontSize: typography.sizes.xs,
-              fontWeight: typography.weights.semibold,
-              letterSpacing: typography.tracking.widest,
-              textTransform: 'uppercase',
-            }}
-          >
-            Chapters (optional)
-          </Text>
+        <View style={styles.section}>
+          <View style={styles.labelRow}>
+            <Text style={styles.sectionLabel}>Chapters</Text>
+            {selectedChapterIds.size > 0 && (
+              <Text style={styles.badge}>{selectedChapterIds.size} selected</Text>
+            )}
+          </View>
           {chapters.length === 0 ? (
-            <Card variant="flat" padding={spacing.md}>
-              <Text style={{ color: colors.text.muted, fontSize: typography.sizes.sm, textAlign: 'center' }}>
-                No chapters in this subject yet.
-              </Text>
-            </Card>
+            <Text style={styles.hint}>No chapters in this subject yet.</Text>
           ) : (
-            <View style={{ gap: spacing.xs }}>
+            <View style={styles.pillWrap}>
               {chapters.map((c) => {
-                const selected = selectedChapterIds.has(c.id);
+                const sel = selectedChapterIds.has(c.id);
                 return (
                   <Pressable
                     key={c.id}
                     onPress={() => toggleChapter(c.id)}
-                    style={({ pressed }) => ({
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: spacing.sm,
-                      padding: spacing.sm + 4,
-                      borderRadius: radius.md,
-                      backgroundColor: selected ? colors.cosmic.purpleFaint : colors.bg.card,
-                      borderWidth: 1,
-                      borderColor: selected ? colors.cosmic.purpleGlow : colors.bg.cardBorder,
-                      opacity: pressed ? 0.8 : 1,
-                    })}
+                    style={({ pressed }) => [styles.pill, sel && styles.pillActive, pressed && { opacity: 0.7 }]}
                   >
-                    <View
-                      style={{
-                        width: 20,
-                        height: 20,
-                        borderRadius: 4,
-                        borderWidth: 1.5,
-                        borderColor: selected ? colors.cosmic.purple : colors.text.muted,
-                        backgroundColor: selected ? colors.cosmic.purple : 'transparent',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      {selected && (
-                        <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>✓</Text>
-                      )}
-                    </View>
-                    <Text
-                      style={{
-                        color: colors.text.primary,
-                        fontSize: typography.sizes.sm,
-                        flex: 1,
-                      }}
-                    >
-                      {c.name}
-                    </Text>
+                    {sel && <Ionicons name="checkmark" size={11} color={colors.cosmic.purpleLight} />}
+                    <Text style={[styles.pillText, sel && styles.pillTextActive]}>{c.name}</Text>
                   </Pressable>
                 );
               })}
@@ -411,179 +329,37 @@ export default function MissionSetupScreen() {
         </View>
       )}
 
-      {/* AI Duration Estimate */}
+      {/* ── Duration ── */}
       {selectedSubjectId && (
-        <View style={{ gap: spacing.sm }}>
-          <Text
-            style={{
-              color: colors.text.secondary,
-              fontSize: typography.sizes.xs,
-              fontWeight: typography.weights.semibold,
-              letterSpacing: typography.tracking.widest,
-              textTransform: 'uppercase',
-            }}
-          >
-            Duration
-          </Text>
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Duration</Text>
 
-          {estimatedMinutes !== null && (
-            <Card variant="glow" padding={spacing.md}>
-              <View style={{ gap: spacing.xs }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
-                  <Image source={AI_AVATAR} style={{ width: 18, height: 18 }} resizeMode="contain" />
-                  <Text
-                    style={{
-                      color: colors.cosmic.purpleLight,
-                      fontSize: typography.sizes.xs,
-                      fontWeight: typography.weights.semibold,
-                      textTransform: 'uppercase',
-                      letterSpacing: 1,
-                    }}
-                  >
-                    AI Estimate
-                  </Text>
-                </View>
-                <Text
-                  style={{
-                    color: colors.text.primary,
-                    fontSize: typography.sizes.xl,
-                    fontWeight: typography.weights.heavy,
-                  }}
-                >
-                  {formatMinutes(estimatedMinutes)}
-                </Text>
-                <Text style={{ color: colors.text.secondary, fontSize: typography.sizes.xs }}>
-                  {estimateReasoning}
-                </Text>
-              </View>
-            </Card>
+          {estimateReasoning !== '' && (
+            <View style={styles.aiNote}>
+              <Image source={AI_AVATAR} style={styles.aiAvatar} resizeMode="contain" />
+              <Text style={styles.aiNoteText}>{estimateReasoning}</Text>
+            </View>
           )}
 
-          {/* Duration picker */}
-          <View style={{ gap: spacing.sm }}>
-            <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-              {durationOptions.slice(0, 3).map(({ minutes: m, label, icon }) => {
-                const active = customMinutes === m || (customMinutes === null && estimatedMinutes === m);
-                return (
-                  <Pressable
-                    key={m}
-                    onPress={() => setCustomMinutes(m)}
-                    style={({ pressed }) => ({
-                      flex: 1,
-                      alignItems: 'center',
-                      paddingVertical: spacing.md,
-                      borderRadius: radius.lg,
-                      backgroundColor: active ? colors.cosmic.purple : colors.bg.card,
-                      borderWidth: active ? 0 : 1,
-                      borderColor: colors.bg.cardBorder,
-                      opacity: pressed ? 0.85 : 1,
-                      transform: [{ scale: active ? 1.04 : 1 }],
-                      shadowColor: active ? colors.cosmic.purple : 'transparent',
-                      shadowOffset: { width: 0, height: 4 },
-                      shadowOpacity: active ? 0.5 : 0,
-                      shadowRadius: 10,
-                      elevation: active ? 6 : 0,
-                    })}
-                  >
-                    <Text style={{ fontSize: 20, marginBottom: 4 }}>{icon}</Text>
-                    <Text style={{
-                      color: active ? colors.text.primary : colors.text.secondary,
-                      fontSize: typography.sizes.md,
-                      fontWeight: typography.weights.bold,
-                    }}>
-                      {formatMinutes(m)}
-                    </Text>
-                    <Text style={{
-                      color: active ? 'rgba(255,255,255,0.7)' : colors.text.muted,
-                      fontSize: typography.sizes.xs,
-                      marginTop: 2,
-                    }}>
-                      {label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+          <View style={styles.pickerCard}>
+            <View style={styles.pickerRow}>
+              <WheelPicker
+                values={HOURS_VALUES.map(h => `${h}h`)}
+                selectedIndex={pickerHourIdx}
+                onChangeIndex={setPickerHourIdx}
+                width={110}
+              />
+              <Text style={styles.pickerColon}>:</Text>
+              <WheelPicker
+                values={MINUTES_VALUES.map(m => String(m).padStart(2, '0'))}
+                selectedIndex={pickerMinuteIdx}
+                onChangeIndex={setPickerMinuteIdx}
+                width={110}
+              />
             </View>
-            <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-              {durationOptions.slice(3).map(({ minutes: m, label, icon }) => {
-                const active = customMinutes === m || (customMinutes === null && estimatedMinutes === m);
-                return (
-                  <Pressable
-                    key={m}
-                    onPress={() => setCustomMinutes(m)}
-                    style={({ pressed }) => ({
-                      flex: 1,
-                      alignItems: 'center',
-                      paddingVertical: spacing.md,
-                      borderRadius: radius.lg,
-                      backgroundColor: active ? colors.cosmic.purple : colors.bg.card,
-                      borderWidth: active ? 0 : 1,
-                      borderColor: colors.bg.cardBorder,
-                      opacity: pressed ? 0.85 : 1,
-                      transform: [{ scale: active ? 1.04 : 1 }],
-                      shadowColor: active ? colors.cosmic.purple : 'transparent',
-                      shadowOffset: { width: 0, height: 4 },
-                      shadowOpacity: active ? 0.5 : 0,
-                      shadowRadius: 10,
-                      elevation: active ? 6 : 0,
-                    })}
-                  >
-                    <Text style={{ fontSize: 20, marginBottom: 4 }}>{icon}</Text>
-                    <Text style={{
-                      color: active ? colors.text.primary : colors.text.secondary,
-                      fontSize: typography.sizes.md,
-                      fontWeight: typography.weights.bold,
-                    }}>
-                      {formatMinutes(m)}
-                    </Text>
-                    <Text style={{
-                      color: active ? 'rgba(255,255,255,0.7)' : colors.text.muted,
-                      fontSize: typography.sizes.xs,
-                      marginTop: 2,
-                    }}>
-                      {label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-              {/* Custom */}
-              {(() => {
-                const isCustomActive = customMinutes !== null &&
-                  !durationOptions.some(d => d.minutes === customMinutes) &&
-                  customMinutes !== estimatedMinutes;
-                return (
-                  <Pressable
-                    onPress={() => setShowCustomModal(true)}
-                    style={({ pressed }) => ({
-                      flex: 1,
-                      alignItems: 'center',
-                      paddingVertical: spacing.md,
-                      borderRadius: radius.lg,
-                      backgroundColor: isCustomActive ? colors.cosmic.purple : colors.bg.card,
-                      borderWidth: 1,
-                      borderColor: isCustomActive ? colors.cosmic.purpleGlow : 'rgba(124,58,237,0.3)',
-                      borderStyle: isCustomActive ? 'solid' : 'dashed',
-                      opacity: pressed ? 0.85 : 1,
-                    })}
-                  >
-                    <Text style={{ fontSize: 20, marginBottom: 4 }}>✏️</Text>
-                    <Text style={{
-                      color: isCustomActive ? colors.text.primary : colors.cosmic.purpleLight,
-                      fontSize: isCustomActive ? typography.sizes.md : typography.sizes.sm,
-                      fontWeight: typography.weights.bold,
-                    }}>
-                      {isCustomActive ? formatMinutes(customMinutes) : 'Custom'}
-                    </Text>
-                    <Text style={{
-                      color: isCustomActive ? 'rgba(255,255,255,0.7)' : colors.text.muted,
-                      fontSize: typography.sizes.xs,
-                      marginTop: 2,
-                    }}>
-                      {isCustomActive ? 'Custom' : 'Set time'}
-                    </Text>
-                  </Pressable>
-                );
-              })()}
+            <View style={styles.pickerFooter}>
+              <Ionicons name="time-outline" size={12} color={colors.text.muted} />
+              <Text style={styles.pickerTotal}>{formatMinutes(plannedMinutes)}</Text>
             </View>
           </View>
 
@@ -591,311 +367,334 @@ export default function MissionSetupScreen() {
             <Pressable
               onPress={runEstimate}
               disabled={estimating}
-              style={({ pressed }) => ({
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: spacing.xs,
-                padding: spacing.sm,
-                borderRadius: radius.md,
-                backgroundColor: colors.bg.elevated,
-                borderWidth: 1,
-                borderColor: colors.cosmic.purpleGlow,
-                opacity: pressed || estimating ? 0.7 : 1,
-              })}
+              style={({ pressed }) => [styles.aiBtn, (pressed || estimating) && { opacity: 0.65 }]}
             >
-              {estimating ? (
-                <ActivityIndicator size="small" color={colors.cosmic.purpleLight} />
-              ) : (
-                <Image source={AI_AVATAR} style={{ width: 16, height: 16 }} resizeMode="contain" />
-              )}
-              <Text
-                style={{
-                  color: colors.cosmic.purpleLight,
-                  fontSize: typography.sizes.sm,
-                  fontWeight: typography.weights.medium,
-                }}
-              >
-                {estimating ? 'Estimating…' : 'AI Duration Estimate'}
-              </Text>
+              {estimating
+                ? <ActivityIndicator size="small" color={colors.cosmic.purpleLight} />
+                : <Image source={AI_AVATAR} style={{ width: 15, height: 15 }} resizeMode="contain" />
+              }
+              <Text style={styles.aiBtnText}>{estimating ? 'Estimating…' : 'AI Duration Estimate'}</Text>
             </Pressable>
           )}
         </View>
       )}
 
-      {/* Quiz toggle */}
+      {/* ── Options ── */}
       {selectedSubjectId && (
-        <Pressable
-          onPress={() => setWithQuiz((v) => !v)}
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: spacing.md,
-            padding: spacing.md,
-            borderRadius: radius.md,
-            backgroundColor: withQuiz ? colors.cosmic.purpleFaint : colors.bg.card,
-            borderWidth: 1,
-            borderColor: withQuiz ? colors.cosmic.purpleGlow : colors.bg.cardBorder,
-          }}
-        >
-          <View style={{ flex: 1 }}>
-            <Text
-              style={{
-                color: colors.text.primary,
-                fontSize: typography.sizes.sm,
-                fontWeight: typography.weights.semibold,
-              }}
-            >
-              📝 Quiz Challenge
-            </Text>
-            <Text style={{ color: colors.text.muted, fontSize: typography.sizes.xs }}>
-              Pass a 5-question quiz after the session for a rarity bonus.
-            </Text>
-          </View>
-          <View
-            style={{
-              width: 44,
-              height: 24,
-              borderRadius: 12,
-              backgroundColor: withQuiz ? colors.cosmic.purple : colors.bg.elevated,
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: 2,
-            }}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Options</Text>
+
+          {/* Quiz */}
+          <Pressable
+            onPress={() => setWithQuiz((v) => !v)}
+            style={({ pressed }) => [styles.optionRow, withQuiz && styles.optionRowActive, pressed && { opacity: 0.8 }]}
           >
-            <View
-              style={{
-                width: 20,
-                height: 20,
-                borderRadius: 10,
-                backgroundColor: '#fff',
-                alignSelf: withQuiz ? 'flex-end' : 'flex-start',
-              }}
-            />
-          </View>
-        </Pressable>
-      )}
+            <View style={[styles.optionIcon, withQuiz && styles.optionIconActive]}>
+              <Text style={{ fontSize: 16 }}>📝</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.optionTitle}>Quiz Challenge</Text>
+              <Text style={styles.optionDesc}>5 questions after session · rarity bonus</Text>
+            </View>
+            <View style={[styles.switchTrack, withQuiz && styles.switchTrackOn]}>
+              <View style={[styles.switchThumb, withQuiz && styles.switchThumbOn]} />
+            </View>
+          </Pressable>
 
-      {/* Wager section */}
-      {selectedSubjectId && (
-        <View style={{ gap: spacing.sm }}>
-          <Text
-            style={{
-              color: colors.text.secondary,
-              fontSize: typography.sizes.xs,
-              fontWeight: typography.weights.semibold,
-              letterSpacing: typography.tracking.widest,
-              textTransform: 'uppercase',
-            }}
-          >
-            Wager (optional — win = bonus rarity)
-          </Text>
-
-          {/* Wager type selector */}
-          <View style={{ flexDirection: 'row', gap: spacing.xs }}>
-            {(['none', 'crystals', 'item'] as const).map((t) => (
-              <Pressable
-                key={t}
-                onPress={() => setWagerType(t)}
-                style={{
-                  flex: 1,
-                  alignItems: 'center',
-                  paddingVertical: spacing.sm,
-                  borderRadius: radius.md,
-                  backgroundColor: wagerType === t ? colors.cosmic.purpleFaint : colors.bg.card,
-                  borderWidth: 1,
-                  borderColor: wagerType === t ? colors.cosmic.purpleGlow : colors.bg.cardBorder,
-                }}
-              >
-                <Text
-                  style={{
-                    color: wagerType === t ? colors.cosmic.purpleLight : colors.text.muted,
-                    fontSize: typography.sizes.xs,
-                    fontWeight: typography.weights.medium,
-                    textTransform: 'capitalize',
-                  }}
-                >
-                  {t === 'none' ? 'No wager' : t === 'crystals' ? '🔷 Crystals' : '🌌 Item'}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-
-          {/* Crystal amount */}
-          {wagerType === 'crystals' && (
-            <View style={{ gap: spacing.xs }}>
-              <Text
-                style={{
-                  color: colors.text.muted,
-                  fontSize: typography.sizes.xs,
-                }}
-              >
-                Balance: {profile?.crystal_balance ?? 0} crystals
-              </Text>
-              <View style={{ flexDirection: 'row', gap: spacing.xs }}>
-                {CRYSTAL_WAGER_OPTIONS.map((amt) => {
-                  const canAfford = (profile?.crystal_balance ?? 0) >= amt;
-                  const active = crystalWager === amt;
-                  return (
-                    <Pressable
-                      key={amt}
-                      onPress={() => canAfford && setCrystalWager(amt)}
-                      style={{
-                        flex: 1,
-                        alignItems: 'center',
-                        paddingVertical: spacing.sm,
-                        borderRadius: radius.md,
-                        backgroundColor: active ? colors.cosmic.purpleFaint : colors.bg.card,
-                        borderWidth: 1,
-                        borderColor: active ? colors.cosmic.purpleGlow : colors.bg.cardBorder,
-                        opacity: canAfford ? 1 : 0.4,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          color: active ? colors.cosmic.purpleLight : colors.text.secondary,
-                          fontSize: typography.sizes.xs,
-                          fontWeight: typography.weights.medium,
-                        }}
-                      >
-                        {amt}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
+          {/* Wager */}
+          <View style={[styles.optionRow, { flexDirection: 'column', alignItems: 'stretch', gap: spacing.sm }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+              <View style={styles.optionIcon}>
+                <Text style={{ fontSize: 16 }}>⚔️</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.optionTitle}>Wager</Text>
+                <Text style={styles.optionDesc}>Win = bonus rarity · optional</Text>
               </View>
             </View>
-          )}
 
-          {/* Item wager */}
-          {wagerType === 'item' && (
-            <View style={{ gap: spacing.xs }}>
-              {universeItems.length === 0 ? (
-                <Card variant="flat" padding={spacing.sm}>
-                  <Text style={{ color: colors.text.muted, fontSize: typography.sizes.xs, textAlign: 'center' }}>
-                    No active universe items to wager.
+            <View style={styles.segmented}>
+              {(['none', 'crystals', 'item'] as const).map((t) => (
+                <Pressable
+                  key={t}
+                  onPress={() => setWagerType(t)}
+                  style={[styles.segment, wagerType === t && styles.segmentActive]}
+                >
+                  <Text style={[styles.segmentText, wagerType === t && styles.segmentTextActive]}>
+                    {t === 'none' ? 'None' : t === 'crystals' ? '🔷 Crystals' : '🌌 Item'}
                   </Text>
-                </Card>
-              ) : (
-                universeItems.slice(0, 6).map((item) => {
-                  const active = wageredItemId === item.id;
-                  return (
-                    <Pressable
-                      key={item.id}
-                      onPress={() => setWageredItemId(item.id)}
-                      style={({ pressed }) => ({
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        gap: spacing.sm,
-                        padding: spacing.sm,
-                        borderRadius: radius.md,
-                        backgroundColor: active ? colors.cosmic.purpleFaint : colors.bg.card,
-                        borderWidth: 1,
-                        borderColor: active ? colors.cosmic.purpleGlow : colors.bg.cardBorder,
-                        opacity: pressed ? 0.8 : 1,
-                      })}
-                    >
-                      <Text style={{ fontSize: 20 }}>🌌</Text>
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ color: colors.text.primary, fontSize: typography.sizes.xs, fontWeight: typography.weights.medium }}>
-                          {item.item_name}
-                        </Text>
-                        <Text style={{ color: colors.text.muted, fontSize: typography.sizes.xs }}>
-                          {item.rarity}
-                        </Text>
-                      </View>
-                      {active && (
-                        <Text style={{ color: colors.cosmic.purpleLight }}>✓</Text>
-                      )}
-                    </Pressable>
-                  );
-                })
-              )}
+                </Pressable>
+              ))}
             </View>
-          )}
-        </View>
-      )}
 
-      {/* Summary + Launch */}
-      {selectedSubjectId && (
-        <Card variant="elevated" padding={spacing.md}>
-          <View style={{ gap: spacing.xs, marginBottom: spacing.md }}>
-            <Text
-              style={{
-                color: colors.text.primary,
-                fontSize: typography.sizes.sm,
-                fontWeight: typography.weights.semibold,
-              }}
-            >
-              Mission Summary
-            </Text>
-            <Text style={{ color: colors.text.secondary, fontSize: typography.sizes.xs }}>
-              Subject: {selectedSubject?.name}
-            </Text>
-            <Text style={{ color: colors.text.secondary, fontSize: typography.sizes.xs }}>
-              Duration: {formatMinutes(customMinutes ?? estimatedMinutes ?? 45)}
-            </Text>
-            {selectedChapterIds.size > 0 && (
-              <Text style={{ color: colors.text.secondary, fontSize: typography.sizes.xs }}>
-                Chapters: {selectedChapterIds.size} selected
-              </Text>
+            {wagerType === 'crystals' && (
+              <View style={{ gap: spacing.xs }}>
+                <Text style={styles.hint}>
+                  Balance:{' '}
+                  <Text style={{ color: colors.crystal.primary, fontWeight: typography.weights.semibold }}>
+                    {profile?.crystal_balance ?? 0}
+                  </Text>{' '}crystals
+                </Text>
+                <View style={styles.chipRow}>
+                  {CRYSTAL_WAGER_OPTIONS.map((amt) => {
+                    const canAfford = (profile?.crystal_balance ?? 0) >= amt;
+                    const active = crystalWager === amt;
+                    return (
+                      <Pressable
+                        key={amt}
+                        onPress={() => canAfford && setCrystalWager(amt)}
+                        style={[styles.chip, active && styles.chipActive, !canAfford && { opacity: 0.3 }]}
+                      >
+                        <Text style={[styles.chipText, active && styles.chipTextActive]}>{amt}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
             )}
-            {withQuiz && (
-              <Text style={{ color: colors.text.secondary, fontSize: typography.sizes.xs }}>
-                Quiz: 5 questions at the end
-              </Text>
-            )}
-            {wagerType !== 'none' && (
-              <Text style={{ color: colors.status.warning, fontSize: typography.sizes.xs }}>
-                Wager: {wagerType === 'crystals' ? `${crystalWager} crystals` : 'Universe item'}
-              </Text>
+
+            {wagerType === 'item' && (
+              <View style={{ gap: spacing.xs }}>
+                {universeItems.length === 0 ? (
+                  <Text style={styles.hint}>No active universe items to wager.</Text>
+                ) : (
+                  universeItems.slice(0, 6).map((item) => {
+                    const active = wageredItemId === item.id;
+                    return (
+                      <Pressable
+                        key={item.id}
+                        onPress={() => setWageredItemId(item.id)}
+                        style={({ pressed }) => [styles.itemRow, active && styles.itemRowActive, pressed && { opacity: 0.75 }]}
+                      >
+                        <Text style={{ fontSize: 18 }}>🌌</Text>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.optionTitle, active && { color: colors.cosmic.purpleLight }]}>{item.item_name}</Text>
+                          <Text style={styles.optionDesc}>{item.rarity}</Text>
+                        </View>
+                        {active && <Ionicons name="checkmark-circle" size={16} color={colors.cosmic.purpleLight} />}
+                      </Pressable>
+                    );
+                  })
+                )}
+              </View>
             )}
           </View>
-          <Button
-            label="🚀 Launch Mission"
-            onPress={launchMission}
-            loading={launching}
-            disabled={!canLaunch}
-            size="lg"
-            fullWidth
-          />
-        </Card>
+        </View>
       )}
 
-      {!selectedSubjectId && subjects.length > 0 && (
-        <Text
-          style={{
-            color: colors.text.muted,
-            fontSize: typography.sizes.sm,
-            textAlign: 'center',
-          }}
-        >
-          Select a subject to configure your mission.
-        </Text>
-      )}
-      <Modal
-        visible={showCustomModal}
-        onClose={() => { setShowCustomModal(false); setCustomMinutesError(''); }}
-        title="Custom Duration"
-      >
-        <View style={{ paddingHorizontal: spacing.lg, gap: spacing.md, paddingBottom: spacing.md }}>
-          <Input
-            label="Duration in minutes"
-            placeholder="e.g. 50"
-            value={customMinutesInput}
-            onChangeText={(v) => { setCustomMinutesInput(v); setCustomMinutesError(''); }}
-            keyboardType="number-pad"
-            autoFocus
-            error={customMinutesError}
-          />
-          <Button
-            label="Set Duration"
-            onPress={handleSetCustomDuration}
-            fullWidth
-            size="lg"
-          />
-        </View>
-      </Modal>
+      {/* ── Launch ── */}
+      <Button
+        label={launchLabel}
+        onPress={launchMission}
+        loading={launching}
+        disabled={!canLaunch}
+        size="lg"
+        fullWidth
+      />
     </ScrollView>
   );
 }
+
+const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: colors.bg.primary },
+  content: { paddingHorizontal: spacing.md, gap: spacing.xl },
+
+  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  backBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: colors.bg.card,
+    borderWidth: 1, borderColor: colors.bg.cardBorder,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  pageTitle: { color: colors.text.primary, fontSize: typography.sizes.xl, fontWeight: typography.weights.heavy },
+
+  section: { gap: spacing.sm },
+  labelRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  sectionLabel: {
+    color: colors.text.secondary,
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.semibold,
+    letterSpacing: typography.tracking.widest,
+    textTransform: 'uppercase',
+  },
+  badge: {
+    paddingHorizontal: spacing.xs + 2, paddingVertical: 2,
+    borderRadius: radius.full,
+    backgroundColor: colors.cosmic.purpleFaint,
+    borderWidth: 1, borderColor: colors.cosmic.purpleGlow,
+    color: colors.cosmic.purpleLight,
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.medium,
+  },
+  hint: { color: colors.text.muted, fontSize: typography.sizes.sm },
+
+  // Subject grid
+  subjectGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: CARD_GAP,
+  },
+  subjectCard: {
+    width: CARD_W,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.lg,
+    backgroundColor: colors.bg.card,
+    borderWidth: 1,
+    borderColor: colors.bg.cardBorder,
+    alignItems: 'center',
+    gap: spacing.xs,
+    position: 'relative',
+  },
+  subjectCardActive: {
+    backgroundColor: colors.cosmic.purpleFaint,
+    borderColor: colors.cosmic.purpleGlow,
+    shadowColor: colors.cosmic.purple,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  subjectCheck: {
+    position: 'absolute', top: 8, right: 8,
+    width: 18, height: 18, borderRadius: 9,
+    backgroundColor: colors.cosmic.purple,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  subjectEmoji: { fontSize: 34 },
+  subjectName: {
+    color: colors.text.muted,
+    fontSize: typography.sizes.sm,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  subjectNameActive: {
+    color: colors.text.primary,
+    fontWeight: typography.weights.semibold,
+  },
+
+  subjectBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.cosmic.purpleFaint,
+    borderWidth: 1, borderColor: colors.cosmic.purpleGlow,
+  },
+  subjectBannerName: {
+    color: colors.text.primary,
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.semibold,
+  },
+
+  // Chapters
+  pillWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
+  pill: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: spacing.sm + 2, paddingVertical: spacing.xs + 2,
+    borderRadius: radius.full,
+    backgroundColor: colors.bg.card,
+    borderWidth: 1, borderColor: colors.bg.cardBorder,
+  },
+  pillActive: { backgroundColor: colors.cosmic.purpleFaint, borderColor: colors.cosmic.purpleGlow },
+  pillText: { color: colors.text.secondary, fontSize: typography.sizes.sm },
+  pillTextActive: { color: colors.cosmic.purpleLight, fontWeight: typography.weights.medium },
+
+  // Duration picker
+  aiNote: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs },
+  aiAvatar: { width: 13, height: 13, marginTop: 2 },
+  aiNoteText: { color: colors.text.muted, fontSize: typography.sizes.xs, flex: 1, lineHeight: 16 },
+  pickerCard: {
+    backgroundColor: colors.bg.card,
+    borderRadius: radius.xl,
+    borderWidth: 1, borderColor: colors.bg.cardBorder,
+    paddingTop: spacing.sm,
+    overflow: 'hidden',
+  },
+  pickerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  pickerColon: {
+    color: colors.text.muted,
+    fontSize: typography.sizes.xxl,
+    fontWeight: typography.weights.bold,
+    marginHorizontal: spacing.xs,
+    paddingBottom: 4,
+  },
+  pickerFooter: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 4, paddingVertical: spacing.sm,
+    borderTopWidth: 1, borderTopColor: colors.bg.cardBorder,
+    marginTop: spacing.xs,
+  },
+  pickerTotal: {
+    color: colors.text.muted,
+    fontSize: typography.sizes.xs,
+    letterSpacing: typography.tracking.widest,
+    textTransform: 'uppercase',
+  },
+  aiBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: spacing.xs, paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.bg.elevated,
+    borderWidth: 1, borderColor: colors.cosmic.purpleGlow,
+  },
+  aiBtnText: { color: colors.cosmic.purpleLight, fontSize: typography.sizes.sm, fontWeight: typography.weights.medium },
+
+  // Options
+  optionRow: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.bg.card,
+    borderWidth: 1, borderColor: colors.bg.cardBorder,
+  },
+  optionRowActive: { backgroundColor: colors.cosmic.purpleFaint, borderColor: colors.cosmic.purpleGlow },
+  optionIcon: {
+    width: 36, height: 36, borderRadius: radius.md,
+    backgroundColor: colors.bg.elevated,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  optionIconActive: { backgroundColor: colors.cosmic.purpleFaint },
+  optionTitle: { color: colors.text.primary, fontSize: typography.sizes.sm, fontWeight: typography.weights.medium },
+  optionDesc: { color: colors.text.muted, fontSize: typography.sizes.xs, marginTop: 1 },
+
+  switchTrack: {
+    width: 42, height: 24, borderRadius: 12,
+    backgroundColor: colors.bg.elevated,
+    padding: 2,
+  },
+  switchTrackOn: { backgroundColor: colors.cosmic.purple },
+  switchThumb: {
+    width: 20, height: 20, borderRadius: 10,
+    backgroundColor: '#fff', alignSelf: 'flex-start',
+  },
+  switchThumbOn: { alignSelf: 'flex-end' },
+
+  segmented: { flexDirection: 'row', gap: spacing.xs },
+  segment: {
+    flex: 1, alignItems: 'center', paddingVertical: spacing.xs + 3,
+    borderRadius: radius.md,
+    backgroundColor: colors.bg.elevated,
+    borderWidth: 1, borderColor: colors.bg.cardBorder,
+  },
+  segmentActive: { backgroundColor: colors.cosmic.purpleFaint, borderColor: colors.cosmic.purpleGlow },
+  segmentText: { color: colors.text.muted, fontSize: typography.sizes.xs, fontWeight: typography.weights.medium },
+  segmentTextActive: { color: colors.cosmic.purpleLight },
+
+  chipRow: { flexDirection: 'row', gap: spacing.xs },
+  chip: {
+    flex: 1, alignItems: 'center', paddingVertical: spacing.xs + 2,
+    borderRadius: radius.md,
+    backgroundColor: colors.bg.elevated,
+    borderWidth: 1, borderColor: colors.bg.cardBorder,
+  },
+  chipActive: { backgroundColor: colors.cosmic.purpleFaint, borderColor: colors.cosmic.purpleGlow },
+  chipText: { color: colors.text.secondary, fontSize: typography.sizes.xs, fontWeight: typography.weights.medium },
+  chipTextActive: { color: colors.cosmic.purpleLight },
+
+  itemRow: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: radius.md,
+  },
+  itemRowActive: {},
+});

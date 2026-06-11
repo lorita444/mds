@@ -300,17 +300,17 @@ export default function SubjectDetailScreen() {
         onPress={() => router.back()}
         style={({ pressed }) => ({
           alignSelf: 'flex-start',
-          width: 44,
-          height: 44,
+          width: 40,
+          height: 40,
           borderRadius: radius.full,
           alignItems: 'center',
           justifyContent: 'center',
-          opacity: pressed ? 0.6 : 1,
+          backgroundColor: pressed ? colors.bg.elevated : colors.bg.card,
+          borderWidth: 1,
+          borderColor: colors.bg.cardBorder,
         })}
       >
-        <Text style={{ color: colors.text.secondary, fontSize: 34, fontWeight: typography.weights.regular, lineHeight: 38 }}>
-          {'<'}
-        </Text>
+        <Text style={{ color: colors.text.secondary, fontSize: 22, lineHeight: 26 }}>‹</Text>
       </Pressable>
 
       {loading ? (
