@@ -1649,7 +1649,7 @@ Reguli:
               options: { type: ['array', 'null'], items: { type: 'string' } },
               correct_answer: { type: 'string' },
             },
-            required: ['question_text', 'question_type', 'correct_answer'],
+            required: ['question_text', 'question_type', 'options', 'correct_answer'],
             additionalProperties: false,
           },
         },
