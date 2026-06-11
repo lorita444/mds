@@ -13,16 +13,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/auth-context';
 import {
   getQuizWithQuestions,
-  getMaterialsByChapter,
   saveQuizAnswer,
   finalizeQuiz,
   completeSession,
   getStudySession,
-  getMaterials,
+  generateQuizAI,
 } from '../../lib/db';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase, API_URL } from '../../lib/supabase';
-import { generateQuizFromContext } from '../../lib/ollama';
 import { colors, spacing, typography, radius } from '../../utils/theme';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
@@ -96,56 +94,20 @@ export default function QuizScreen() {
         return;
       }
 
-      // Generate questions from chapter materials
-      let context = '';
+      // Get subjectId from session, then generate via backend
+      const session = await getStudySession(sessionId);
+      if (!session?.subject_id) {
+        Alert.alert('Error', 'Could not find session subject.', [{ text: 'OK', onPress: () => router.back() }]);
+        return;
+      }
+
       const chapterIdList = (chapterIds ?? '')
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean);
 
-      if (chapterIdList.length > 0) {
-        const allMaterials = await Promise.all(
-          chapterIdList.map((cid) => getMaterialsByChapter(cid)),
-        );
-        const summaries = allMaterials
-          .flat()
-          .filter((m) => m.summary)
-          .map((m) => m.summary as string);
-        context = summaries.join('\n\n---\n\n').slice(0, 12000);
-      }
-
-      let subjectName = 'your subject';
-      
-      if (!context && sessionId) {
-        // Fallback: fetch subject materials via session
-        const session = await getStudySession(sessionId);
-        if (session?.subject_id) {
-          const mats = await getMaterials(session.subject_id);
-          context = (mats ?? [])
-            .filter(m => m.summary)
-            .slice(0, 5)
-            .map(m => m.summary as string)
-            .join('\n\n---\n\n');
-          subjectName = session.subject_name || 'your subject';
-        }
-      } else if (sessionId) {
-        const session = await getStudySession(sessionId);
-        if (session) {
-          subjectName = session.subject_name || 'your subject';
-        }
-      }
-
-      if (!context) {
-        Alert.alert(
-          'No Materials',
-          'No summarized materials found. The quiz cannot be generated.',
-          [{ text: 'OK', onPress: () => router.back() }],
-        );
-        return;
-      }
-
-      const generated = await generateQuizFromContext(context, subjectName, 5);
-      const saved = await insertQuizQuestions(quizId, generated);
+      const generated = await generateQuizAI(session.subject_id, chapterIdList.length > 0 ? chapterIdList : null, 5);
+      const saved = await insertQuizQuestions(quizId, generated as any);
       setQuestions(saved);
       setPhase('answering');
     } catch (e) {

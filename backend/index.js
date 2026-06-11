@@ -1163,9 +1163,6 @@ app.post('/api/flashcards', async (req, res) => {
 });
 
 app.post('/api/flashcards/generate', authenticateToken, async (req, res) => {
-  console.log('[GENERATE] Endpoint hit');
-  console.log('[GENERATE] Body:', JSON.stringify(req.body));
-  console.log('[GENERATE] User:', req.user?.id);
   const userId = req.user.id;
   const { subjectId, chapterId, count = 10 } = req.body;
 
@@ -1174,8 +1171,6 @@ app.post('/api/flashcards/generate', authenticateToken, async (req, res) => {
   }
 
   try {
-    // Fetch subject, chapters, and material summaries from DB
-    console.log('[GENERATE] Fetching subject:', subjectId);
     const subject = await db.querySingle('SELECT * FROM subjects WHERE id = ?', [subjectId]);
     if (!subject) {
       return res.status(404).json({ error: 'Subject not found' });
@@ -1183,16 +1178,22 @@ app.post('/api/flashcards/generate', authenticateToken, async (req, res) => {
 
     const chapters = await db.query('SELECT id, name, description FROM chapters WHERE subject_id = ? ORDER BY order_index', [subjectId]);
 
+    // Prefer summarized materials; fall back to all materials for the subject/chapter
     let materials;
     if (chapterId) {
       materials = await db.query('SELECT name, summary FROM materials WHERE subject_id = ? AND chapter_id = ? AND is_summarized = 1', [subjectId, chapterId]);
+      if (materials.length === 0) {
+        materials = await db.query('SELECT name, summary FROM materials WHERE subject_id = ? AND chapter_id = ?', [subjectId, chapterId]);
+      }
     } else {
       materials = await db.query('SELECT name, summary FROM materials WHERE subject_id = ? AND is_summarized = 1', [subjectId]);
+      if (materials.length === 0) {
+        materials = await db.query('SELECT name, summary FROM materials WHERE subject_id = ?', [subjectId]);
+      }
     }
 
-    console.log('[GENERATE] Found', materials.length, 'materials');
     if (materials.length === 0) {
-      return res.status(400).json({ error: 'No summarized materials found. Upload and summarize materials first.' });
+      return res.status(400).json({ error: 'No materials found. Upload materials first.' });
     }
 
     const chapterContext = chapters.length > 0
@@ -1240,17 +1241,11 @@ Reguli:
       additionalProperties: false,
     };
 
-    // Dynamic import for ESM package
-    console.log('[GENERATE] Importing Codex SDK...');
     const { Codex } = await import('@openai/codex-sdk');
-    console.log('[GENERATE] Creating Codex instance...');
     const codex = new Codex();
     const thread = codex.startThread({ skipGitRepoCheck: true });
 
-    console.log('[GENERATE] Sending prompt to Codex (length:', prompt.length, 'chars)...');
     const turn = await thread.run(prompt, { outputSchema: flashcardSchema });
-    console.log('[GENERATE] Codex responded. finalResponse type:', typeof turn.finalResponse);
-    console.log('[GENERATE] Codex finalResponse:', JSON.stringify(turn.finalResponse)?.substring(0, 500));
 
     let generated;
     try {
@@ -1258,9 +1253,7 @@ Reguli:
         ? JSON.parse(turn.finalResponse)
         : turn.finalResponse;
       generated = parsed.flashcards || parsed;
-      console.log('[GENERATE] Parsed', generated?.length, 'flashcards');
     } catch (parseErr) {
-      console.error('[GENERATE] Codex response parse error:', parseErr, turn.finalResponse);
       return res.status(500).json({ error: 'AI returned invalid format' });
     }
 
@@ -1593,6 +1586,98 @@ app.post('/api/quizzes/answers', async (req, res) => {
       [id, quiz_id, question_id, user_id, user_answer, is_correct ? 1 : 0]
     );
     res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/quizzes/generate', authenticateToken, async (req, res) => {
+  const { subjectId, chapterIds, count = 5 } = req.body;
+  if (!subjectId) return res.status(400).json({ error: 'subjectId is required' });
+
+  try {
+    const subject = await db.querySingle('SELECT * FROM subjects WHERE id = ?', [subjectId]);
+    if (!subject) return res.status(404).json({ error: 'Subject not found' });
+
+    // Get material context — prefer summarized, fall back to all
+    let materials;
+    if (chapterIds && chapterIds.length > 0) {
+      const placeholders = chapterIds.map(() => '?').join(',');
+      materials = await db.query(
+        `SELECT name, summary FROM materials WHERE subject_id = ? AND chapter_id IN (${placeholders}) AND is_summarized = 1`,
+        [subjectId, ...chapterIds]
+      );
+      if (materials.length === 0) {
+        materials = await db.query(
+          `SELECT name, summary FROM materials WHERE subject_id = ? AND chapter_id IN (${placeholders})`,
+          [subjectId, ...chapterIds]
+        );
+      }
+    } else {
+      materials = await db.query('SELECT name, summary FROM materials WHERE subject_id = ? AND is_summarized = 1', [subjectId]);
+      if (materials.length === 0) {
+        materials = await db.query('SELECT name, summary FROM materials WHERE subject_id = ?', [subjectId]);
+      }
+    }
+
+    const context = materials.map(m => m.summary || m.name).join('\n\n---\n\n').slice(0, 10000);
+    if (!context.trim()) return res.status(400).json({ error: 'No materials found. Upload materials first.' });
+
+    const prompt = `Ești un generator de quiz pentru "${subject.name}".
+Generează exact ${count} întrebări pe baza materialelor de mai jos.
+Materiale:
+${context}
+
+Reguli:
+- Folosește tipuri mixte: multiple_choice (cu 4 opțiuni), true_false, short_answer
+- Pentru multiple_choice: exact 4 opțiuni, correct_answer = una dintre ele
+- Pentru true_false: options = ["Adevărat","Fals"], correct_answer = unul dintre ele
+- Pentru short_answer: options = null
+- Acoperă conceptele principale din materiale
+- Limba: aceeași ca materialele`;
+
+    const quizSchema = {
+      type: 'object',
+      properties: {
+        questions: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              question_text: { type: 'string' },
+              question_type: { type: 'string', enum: ['multiple_choice', 'true_false', 'short_answer'] },
+              options: { type: ['array', 'null'], items: { type: 'string' } },
+              correct_answer: { type: 'string' },
+            },
+            required: ['question_text', 'question_type', 'correct_answer'],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ['questions'],
+      additionalProperties: false,
+    };
+
+    const { Codex } = await import('@openai/codex-sdk');
+    const codex = new Codex();
+    const thread = codex.startThread({ skipGitRepoCheck: true });
+    const turn = await thread.run(prompt, { outputSchema: quizSchema });
+
+    let questions;
+    try {
+      const parsed = typeof turn.finalResponse === 'string'
+        ? JSON.parse(turn.finalResponse)
+        : turn.finalResponse;
+      questions = parsed.questions || parsed;
+    } catch {
+      return res.status(500).json({ error: 'AI returned invalid format' });
+    }
+
+    if (!Array.isArray(questions) || questions.length === 0) {
+      return res.status(500).json({ error: 'AI returned no questions' });
+    }
+
+    res.json(questions);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

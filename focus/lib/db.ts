@@ -501,19 +501,21 @@ export async function generateFlashcardsAI(
   chapterId?: string | null,
   count: number = 10,
 ): Promise<Flashcard[]> {
-  console.log('[generateFlashcardsAI] Starting request', { subjectId, chapterId, count });
-  console.log('[generateFlashcardsAI] API_URL:', API_URL);
-  try {
-    const result = await apiFetch('/flashcards/generate', {
-      method: 'POST',
-      body: JSON.stringify({ subjectId, chapterId: chapterId || null, count }),
-    });
-    console.log('[generateFlashcardsAI] Success, got', result?.length, 'cards');
-    return result;
-  } catch (err) {
-    console.error('[generateFlashcardsAI] Error:', err);
-    throw err;
-  }
+  return apiFetch('/flashcards/generate', {
+    method: 'POST',
+    body: JSON.stringify({ subjectId, chapterId: chapterId || null, count }),
+  });
+}
+
+export async function generateQuizAI(
+  subjectId: string,
+  chapterIds?: string[] | null,
+  count: number = 5,
+): Promise<{ question_text: string; question_type: string; options: string[] | null; correct_answer: string }[]> {
+  return apiFetch('/quizzes/generate', {
+    method: 'POST',
+    body: JSON.stringify({ subjectId, chapterIds: chapterIds || null, count }),
+  });
 }
 
 export async function createFlashcards(
