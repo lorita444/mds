@@ -225,7 +225,13 @@ export default function MissionSetupScreen() {
 
   if (loading) return <LoadingState message="Loading..." />;
 
-  const durationOptions = [30, 45, 60, 90, 120];
+  const durationOptions = [
+    { minutes: 25,  label: 'Sprint',     icon: '⚡' },
+    { minutes: 45,  label: 'Focus',      icon: '🎯' },
+    { minutes: 60,  label: 'Session',    icon: '📚' },
+    { minutes: 90,  label: 'Deep Work',  icon: '🔥' },
+    { minutes: 120, label: 'Marathon',   icon: '🚀' },
+  ];
 
   return (
     <ScrollView
@@ -453,63 +459,132 @@ export default function MissionSetupScreen() {
             </Card>
           )}
 
-          {/* Manual duration override */}
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs }}>
-            {durationOptions.map((m) => {
-              const active = customMinutes === m ||
-                (customMinutes === null && estimatedMinutes === m);
-              return (
-                <Pressable
-                  key={m}
-                  onPress={() => setCustomMinutes(m)}
-                  style={{
-                    paddingHorizontal: spacing.md,
-                    paddingVertical: spacing.sm,
-                    borderRadius: radius.md,
-                    backgroundColor: active ? colors.cosmic.purple : colors.bg.card,
-                    borderWidth: 1,
-                    borderColor: active ? colors.cosmic.purpleGlow : colors.bg.cardBorder,
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: colors.text.primary,
-                      fontSize: typography.sizes.sm,
-                      fontWeight: active ? typography.weights.bold : typography.weights.regular,
-                    }}
+          {/* Duration picker */}
+          <View style={{ gap: spacing.sm }}>
+            <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+              {durationOptions.slice(0, 3).map(({ minutes: m, label, icon }) => {
+                const active = customMinutes === m || (customMinutes === null && estimatedMinutes === m);
+                return (
+                  <Pressable
+                    key={m}
+                    onPress={() => setCustomMinutes(m)}
+                    style={({ pressed }) => ({
+                      flex: 1,
+                      alignItems: 'center',
+                      paddingVertical: spacing.md,
+                      borderRadius: radius.lg,
+                      backgroundColor: active ? colors.cosmic.purple : colors.bg.card,
+                      borderWidth: active ? 0 : 1,
+                      borderColor: colors.bg.cardBorder,
+                      opacity: pressed ? 0.85 : 1,
+                      transform: [{ scale: active ? 1.04 : 1 }],
+                      shadowColor: active ? colors.cosmic.purple : 'transparent',
+                      shadowOffset: { width: 0, height: 4 },
+                      shadowOpacity: active ? 0.5 : 0,
+                      shadowRadius: 10,
+                      elevation: active ? 6 : 0,
+                    })}
                   >
-                    {formatMinutes(m)}
-                  </Text>
-                </Pressable>
-              );
-            })}
-            {/* Custom Duration Chip */}
-            {(() => {
-              const isCustomActive = customMinutes !== null && !durationOptions.includes(customMinutes) && customMinutes !== estimatedMinutes;
-              return (
-                <Pressable
-                  onPress={() => setShowCustomModal(true)}
-                  style={{
-                    paddingHorizontal: spacing.md,
-                    paddingVertical: spacing.sm,
-                    borderRadius: radius.md,
-                    backgroundColor: isCustomActive ? colors.cosmic.purple : 'rgba(124,58,237,0.1)',
-                    borderWidth: 1,
-                    borderColor: isCustomActive ? colors.cosmic.purpleGlow : 'rgba(124,58,237,0.3)',
-                  }}
-                >
-                  <Text
-                    style={{
+                    <Text style={{ fontSize: 20, marginBottom: 4 }}>{icon}</Text>
+                    <Text style={{
+                      color: active ? colors.text.primary : colors.text.secondary,
+                      fontSize: typography.sizes.md,
+                      fontWeight: typography.weights.bold,
+                    }}>
+                      {formatMinutes(m)}
+                    </Text>
+                    <Text style={{
+                      color: active ? 'rgba(255,255,255,0.7)' : colors.text.muted,
+                      fontSize: typography.sizes.xs,
+                      marginTop: 2,
+                    }}>
+                      {label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+              {durationOptions.slice(3).map(({ minutes: m, label, icon }) => {
+                const active = customMinutes === m || (customMinutes === null && estimatedMinutes === m);
+                return (
+                  <Pressable
+                    key={m}
+                    onPress={() => setCustomMinutes(m)}
+                    style={({ pressed }) => ({
+                      flex: 1,
+                      alignItems: 'center',
+                      paddingVertical: spacing.md,
+                      borderRadius: radius.lg,
+                      backgroundColor: active ? colors.cosmic.purple : colors.bg.card,
+                      borderWidth: active ? 0 : 1,
+                      borderColor: colors.bg.cardBorder,
+                      opacity: pressed ? 0.85 : 1,
+                      transform: [{ scale: active ? 1.04 : 1 }],
+                      shadowColor: active ? colors.cosmic.purple : 'transparent',
+                      shadowOffset: { width: 0, height: 4 },
+                      shadowOpacity: active ? 0.5 : 0,
+                      shadowRadius: 10,
+                      elevation: active ? 6 : 0,
+                    })}
+                  >
+                    <Text style={{ fontSize: 20, marginBottom: 4 }}>{icon}</Text>
+                    <Text style={{
+                      color: active ? colors.text.primary : colors.text.secondary,
+                      fontSize: typography.sizes.md,
+                      fontWeight: typography.weights.bold,
+                    }}>
+                      {formatMinutes(m)}
+                    </Text>
+                    <Text style={{
+                      color: active ? 'rgba(255,255,255,0.7)' : colors.text.muted,
+                      fontSize: typography.sizes.xs,
+                      marginTop: 2,
+                    }}>
+                      {label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+              {/* Custom */}
+              {(() => {
+                const isCustomActive = customMinutes !== null &&
+                  !durationOptions.some(d => d.minutes === customMinutes) &&
+                  customMinutes !== estimatedMinutes;
+                return (
+                  <Pressable
+                    onPress={() => setShowCustomModal(true)}
+                    style={({ pressed }) => ({
+                      flex: 1,
+                      alignItems: 'center',
+                      paddingVertical: spacing.md,
+                      borderRadius: radius.lg,
+                      backgroundColor: isCustomActive ? colors.cosmic.purple : colors.bg.card,
+                      borderWidth: 1,
+                      borderColor: isCustomActive ? colors.cosmic.purpleGlow : 'rgba(124,58,237,0.3)',
+                      borderStyle: isCustomActive ? 'solid' : 'dashed',
+                      opacity: pressed ? 0.85 : 1,
+                    })}
+                  >
+                    <Text style={{ fontSize: 20, marginBottom: 4 }}>✏️</Text>
+                    <Text style={{
                       color: isCustomActive ? colors.text.primary : colors.cosmic.purpleLight,
-                      fontSize: typography.sizes.sm,
-                      fontWeight: isCustomActive ? typography.weights.bold : typography.weights.regular,
-                    }}
-                  >
-                    {isCustomActive ? `Custom: ${formatMinutes(customMinutes)}` : '+ Custom'}
-                  </Text>
-                </Pressable>
-              );
-            })()}
+                      fontSize: isCustomActive ? typography.sizes.md : typography.sizes.sm,
+                      fontWeight: typography.weights.bold,
+                    }}>
+                      {isCustomActive ? formatMinutes(customMinutes) : 'Custom'}
+                    </Text>
+                    <Text style={{
+                      color: isCustomActive ? 'rgba(255,255,255,0.7)' : colors.text.muted,
+                      fontSize: typography.sizes.xs,
+                      marginTop: 2,
+                    }}>
+                      {isCustomActive ? 'Custom' : 'Set time'}
+                    </Text>
+                  </Pressable>
+                );
+              })()}
+            </View>
           </View>
 
           {selectedChapterIds.size > 0 && (
