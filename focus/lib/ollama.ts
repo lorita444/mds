@@ -129,7 +129,7 @@ export async function generateFlashcardsFromText(
   text: string,
   subjectName: string,
   chapterName?: string,
-  count = 10,
+  count = 5,
 ): Promise<{ question: string; answer: string; difficulty: 'easy' | 'medium' | 'hard' }[]> {
   const context = chapterName
     ? `materia "${subjectName}", capitolul "${chapterName}"`

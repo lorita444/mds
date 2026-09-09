@@ -82,10 +82,12 @@ describe('Backend API Routes', () => {
       };
       
       db.querySingle.mockResolvedValue(mockUser);
+      db.query.mockResolvedValue({});
 
       const response = await request(app)
         .post('/api/auth/login')
         .send({ email: 'test@example.com', password: 'correct_password' });
+
 
       expect(response.status).toBe(200);
       expect(response.body.session).toBeDefined();

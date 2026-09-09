@@ -60,6 +60,9 @@ export const supabase = {
         const user = json.user;
         
         await AsyncStorage.setItem('auth_token', session.access_token);
+        if (session.refresh_token) {
+          await AsyncStorage.setItem('refresh_token', session.refresh_token);
+        }
         await AsyncStorage.setItem('auth_user', JSON.stringify(user));
         
         notifyAuthStateChange('SIGNED_IN', { access_token: session.access_token, user });
@@ -87,6 +90,9 @@ export const supabase = {
         const user = json.user;
 
         await AsyncStorage.setItem('auth_token', session.access_token);
+        if (session.refresh_token) {
+          await AsyncStorage.setItem('refresh_token', session.refresh_token);
+        }
         await AsyncStorage.setItem('auth_user', JSON.stringify(user));
 
         notifyAuthStateChange('SIGNED_IN', { access_token: session.access_token, user });
@@ -98,14 +104,22 @@ export const supabase = {
 
     async signOut() {
       try {
-        await AsyncStorage.removeItem('auth_token');
-        await AsyncStorage.removeItem('auth_user');
+        const refreshToken = await AsyncStorage.getItem('refresh_token');
+        if (refreshToken) {
+          await fetch(`${API_URL}/auth/logout`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refresh_token: refreshToken }),
+          }).catch(() => {});
+        }
+        await AsyncStorage.multiRemove(['auth_token', 'refresh_token', 'auth_user']);
         notifyAuthStateChange('SIGNED_OUT', null);
       } catch (e) {
         console.error('Failed to sign out from AsyncStorage', e);
       }
       return { error: null };
     },
+
 
     async resetPasswordForEmail(email: string) {
       try {

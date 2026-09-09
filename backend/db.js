@@ -45,7 +45,21 @@ async function initializeDatabase() {
       ) ENGINE=InnoDB;
     `);
 
+    // 1b. Refresh Tokens
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS refresh_tokens (
+        id VARCHAR(36) PRIMARY KEY,
+        user_id VARCHAR(36) NOT NULL,
+        token VARCHAR(512) NOT NULL,
+        expires_at DATETIME NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_refresh_tokens_user (user_id),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB;
+    `);
+
     // 2. Subjects
+
     await connection.query(`
       CREATE TABLE IF NOT EXISTS subjects (
         id VARCHAR(36) PRIMARY KEY,
@@ -94,6 +108,7 @@ async function initializeDatabase() {
         file_type VARCHAR(100) NOT NULL,
         size_bytes BIGINT NOT NULL DEFAULT 0,
         summary TEXT NULL,
+        extracted_text LONGTEXT NULL,
         is_summarized TINYINT(1) NOT NULL DEFAULT 0,
         embedding_done TINYINT(1) NOT NULL DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -333,11 +348,12 @@ async function initializeDatabase() {
       ) ENGINE=InnoDB;
     `);
 
-    // Safe ALTER migrations for existing databases (coop_rooms pause state)
+    // Safe ALTER migrations for existing databases (coop_rooms pause state & materials extracted_text)
     const alterMigrations = [
       "ALTER TABLE coop_rooms ADD COLUMN is_paused TINYINT(1) NOT NULL DEFAULT 0",
       "ALTER TABLE coop_rooms ADD COLUMN paused_at TIMESTAMP NULL DEFAULT NULL",
       "ALTER TABLE coop_rooms ADD COLUMN paused_seconds INT NOT NULL DEFAULT 0",
+      "ALTER TABLE materials ADD COLUMN extracted_text LONGTEXT NULL",
     ];
     for (const sql of alterMigrations) {
       try {
