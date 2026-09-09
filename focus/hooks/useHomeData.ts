@@ -23,19 +23,21 @@ export function useHomeData(): HomeData {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  const load = useCallback(
-    async (isRefresh = false) => {
-      if (!user?.id) return;
-      if (isRefresh) setRefreshing(true);
-      else setLoading(true);
-      setError(null);
+  useEffect(() => {
+    let active = true;
+    const userId = user?.id;
+    if (!userId) return;
+
+    const loadData = async () => {
       try {
         const [items, sessions, streaks] = await Promise.all([
-          getUniverseItems(user.id),
-          getRecentSessions(user.id, 10),
-          getStreaks(user.id, 7),
+          getUniverseItems(userId),
+          getRecentSessions(userId, 10),
+          getStreaks(userId, 7),
         ]);
+        if (!active) return;
         const mainPlanet = items.find((i) => i.item_type === 'planet') ?? null;
         setPlanet(mainPlanet);
         setRecentSessions(sessions);
@@ -43,19 +45,29 @@ export function useHomeData(): HomeData {
         const todayStreak = streaks.find((s) => s.study_date === today);
         setTodaySeconds(todayStreak?.total_seconds ?? 0);
         setWeekStreaks(streaks);
+        setError(null);
       } catch (e) {
+        if (!active) return;
         setError(e instanceof Error ? e.message : 'Failed to load dashboard');
       } finally {
-        setLoading(false);
-        setRefreshing(false);
+        if (active) {
+          setLoading(false);
+          setRefreshing(false);
+        }
       }
-    },
-    [user?.id],
-  );
+    };
 
-  useEffect(() => {
-    load(false);
-  }, [load]);
+    void loadData();
+
+    return () => {
+      active = false;
+    };
+  }, [user?.id, refreshTrigger]);
+
+  const refresh = useCallback(() => {
+    setRefreshing(true);
+    setRefreshTrigger((prev) => prev + 1);
+  }, []);
 
   return {
     planet,
@@ -65,6 +77,6 @@ export function useHomeData(): HomeData {
     loading,
     refreshing,
     error,
-    refresh: () => load(true),
+    refresh,
   };
 }

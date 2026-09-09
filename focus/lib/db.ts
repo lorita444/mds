@@ -17,7 +17,6 @@ import type {
   CoopRoom,
   CoopRoomMember,
   Streak,
-  Wager,
   Quiz,
   QuizQuestion,
 } from './types';
@@ -62,7 +61,7 @@ async function refreshAccessToken(): Promise<string | null> {
 
       await AsyncStorage.multiRemove(['auth_token', 'refresh_token', 'auth_user']).catch(() => {});
       return null;
-    } catch (e) {
+    } catch {
       await AsyncStorage.multiRemove(['auth_token', 'refresh_token', 'auth_user']).catch(() => {});
       return null;
     } finally {
