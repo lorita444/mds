@@ -324,7 +324,7 @@ export default function FlashcardsScreen() {
     setGenerating(true);
     setShowGenerateModal(false);
     try {
-      const saved = await generateFlashcardsAI(subjectId, selectedChapterId, 10);
+      const saved = await generateFlashcardsAI(subjectId, selectedChapterId, 5);
       setCards((prev) => [...saved, ...prev]);
       Alert.alert('Done', `${saved.length} flashcards generated!`);
     } catch (e) {
@@ -492,7 +492,7 @@ export default function FlashcardsScreen() {
       >
         <View style={{ paddingHorizontal: spacing.lg, gap: spacing.md, paddingBottom: spacing.md }}>
           <Text style={{ color: colors.text.secondary, fontSize: typography.sizes.sm, lineHeight: 20 }}>
-            AI will generate 10 flashcards from your uploaded materials. Select a chapter for more focused cards, or generate from all materials.
+            AI will generate 5 flashcards from your uploaded materials. Select a chapter for more focused cards, or generate from all materials.
           </Text>
 
           {chapters.length > 0 && (
@@ -538,7 +538,7 @@ export default function FlashcardsScreen() {
             </View>
           )}
 
-          <Button label="Generate 10 Flashcards" onPress={handleGenerate} fullWidth size="lg" />
+          <Button label="Generate 5 Flashcards" onPress={handleGenerate} fullWidth size="lg" />
         </View>
       </Modal>
     </ScrollView>

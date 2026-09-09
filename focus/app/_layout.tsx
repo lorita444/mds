@@ -1,3 +1,4 @@
+// @ts-ignore
 import '../global.css';
 import 'react-native-url-polyfill/auto';
 

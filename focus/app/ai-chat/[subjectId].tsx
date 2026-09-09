@@ -255,7 +255,7 @@ export default function AIChatScreen() {
               ]}
             >
               <Text style={styles.messageText} selectable>
-                {m.content}
+                {typeof m.content === 'string' ? m.content : ((m.content as any)?.reply || (m.content as any)?.message || JSON.stringify(m.content))}
               </Text>
             </View>
           </View>

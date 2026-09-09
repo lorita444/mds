@@ -67,7 +67,7 @@ export function AuthLoadingOverlay({ visible, message, subtitle }: Props) {
 
 const styles = StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(3,7,18,0.93)',
     alignItems: 'center',
     justifyContent: 'center',

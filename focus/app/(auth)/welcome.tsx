@@ -121,12 +121,12 @@ export default function WelcomeScreen() {
       {/* Background */}
       <Animated.Image
         source={BG_COSMIC_DEEP}
-        style={[StyleSheet.absoluteFillObject, { opacity: starsOpacity }]}
+        style={[StyleSheet.absoluteFill, { opacity: starsOpacity }]}
         resizeMode="cover"
       />
       <Animated.Image
         source={BG_STARS}
-        style={[StyleSheet.absoluteFillObject, { opacity: starsOpacity }]}
+        style={[StyleSheet.absoluteFill, { opacity: starsOpacity }]}
         resizeMode="cover"
       />
 

@@ -17,13 +17,64 @@ import type {
   CoopRoom,
   CoopRoomMember,
   Streak,
-  Wager,
   Quiz,
   QuizQuestion,
 } from './types';
 
-// Centralized fetch helper for backend API
-async function apiFetch(path: string, options: RequestInit = {}) {
+// Mutex lock variables to handle concurrent token refresh requests
+let isRefreshing = false;
+let refreshPromise: Promise<string | null> | null = null;
+
+async function refreshAccessToken(): Promise<string | null> {
+  if (isRefreshing && refreshPromise) {
+    return refreshPromise;
+  }
+
+  isRefreshing = true;
+  refreshPromise = (async () => {
+    try {
+      const storedRefreshToken = await AsyncStorage.getItem('refresh_token');
+      if (!storedRefreshToken) {
+        await AsyncStorage.multiRemove(['auth_token', 'refresh_token', 'auth_user']).catch(() => {});
+        return null;
+      }
+
+      const res = await fetch(`${API_URL}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: storedRefreshToken }),
+      });
+
+      if (!res.ok) {
+        await AsyncStorage.multiRemove(['auth_token', 'refresh_token', 'auth_user']).catch(() => {});
+        return null;
+      }
+
+      const data = await res.json();
+      if (data?.access_token) {
+        await AsyncStorage.setItem('auth_token', data.access_token);
+        if (data.refresh_token) {
+          await AsyncStorage.setItem('refresh_token', data.refresh_token);
+        }
+        return data.access_token;
+      }
+
+      await AsyncStorage.multiRemove(['auth_token', 'refresh_token', 'auth_user']).catch(() => {});
+      return null;
+    } catch {
+      await AsyncStorage.multiRemove(['auth_token', 'refresh_token', 'auth_user']).catch(() => {});
+      return null;
+    } finally {
+      isRefreshing = false;
+      refreshPromise = null;
+    }
+  })();
+
+  return refreshPromise;
+}
+
+// Centralized fetch helper for backend API with automatic token rotation
+async function apiFetch(path: string, options: RequestInit = {}, isRetry = false): Promise<any> {
   const token = await AsyncStorage.getItem('auth_token');
   const headers = {
     'Content-Type': 'application/json',
@@ -47,6 +98,18 @@ async function apiFetch(path: string, options: RequestInit = {}) {
       // Keep the raw response body for non-JSON errors such as Express 404 HTML.
     }
 
+    // Single-flight token refresh retry on 401/403 for API routes (skipping auth endpoints)
+    if ((response.status === 401 || response.status === 403) && !isRetry && !path.includes('/auth/')) {
+      const newToken = await refreshAccessToken();
+      if (newToken) {
+        return apiFetch(path, options, true);
+      }
+    }
+
+    if (response.status === 401 || response.status === 403) {
+      await AsyncStorage.multiRemove(['auth_token', 'refresh_token', 'auth_user']).catch(() => {});
+    }
+
     throw new Error(
       errorMessage
         ? `HTTP ${response.status} on ${path}: ${errorMessage}`
@@ -56,6 +119,8 @@ async function apiFetch(path: string, options: RequestInit = {}) {
 
   return response.json();
 }
+
+
 
 // ── USERS ────────────────────────────────────────────────────
 
@@ -499,7 +564,7 @@ export async function getFlashcards(
 export async function generateFlashcardsAI(
   subjectId: string,
   chapterId?: string | null,
-  count: number = 10,
+  count: number = 5,
 ): Promise<Flashcard[]> {
   return apiFetch('/flashcards/generate', {
     method: 'POST',
@@ -575,7 +640,14 @@ export async function generateChatReplyWithCodex(
     method: 'POST',
     body: JSON.stringify({ subject_id: subjectId, message, history }),
   });
-  return result.reply;
+  let replyText = typeof result?.reply === 'string' ? result.reply : (typeof result === 'string' ? result : '');
+  if (!replyText && typeof result === 'object' && result !== null) {
+    replyText = result.message || result.reply || result.text || result.content || '';
+  }
+  if (typeof replyText !== 'string' || !replyText) {
+    replyText = String(result?.reply ?? result ?? '');
+  }
+  return replyText.trim();
 }
 
 export async function explainCourseWithCodex(subjectId: string): Promise<string> {
@@ -583,7 +655,14 @@ export async function explainCourseWithCodex(subjectId: string): Promise<string>
     method: 'POST',
     body: JSON.stringify({ subject_id: subjectId }),
   });
-  return result.explanation;
+  let expText = typeof result?.explanation === 'string' ? result.explanation : (typeof result === 'string' ? result : '');
+  if (!expText && typeof result === 'object' && result !== null) {
+    expText = result.explanation || result.reply || result.message || result.content || '';
+  }
+  if (typeof expText !== 'string' || !expText) {
+    expText = String(result?.explanation ?? result ?? '');
+  }
+  return expText.trim();
 }
 
 // ── QUIZZES ──────────────────────────────────────────────────

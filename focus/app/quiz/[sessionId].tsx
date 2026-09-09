@@ -90,7 +90,11 @@ export default function QuizScreen() {
   } | null>(null);
 
   const loadAndGenerate = useCallback(async () => {
-    if (!quizId || !user?.id) return;
+    if (!user?.id) return;
+    if (!quizId || !sessionId) {
+      Alert.alert('Error', 'Quiz or Session ID is missing.', [{ text: 'OK', onPress: () => router.back() }]);
+      return;
+    }
     try {
       const existing = await getQuizWithQuestions(quizId);
       if (existing && existing.questions.length > 0) {

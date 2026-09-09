@@ -7,10 +7,23 @@ const multer = require('multer');
 const pdfParse = require('pdf-parse');
 const { crypto } = require('crypto'); // Built-in Node.js crypto
 const db = require('./db');
+const {
+  validateSummary,
+  validateFlashcards,
+  validateQuiz,
+  validateChatReply,
+  parseAIResponse,
+  AIValidationError,
+  AIParseError,
+} = require('./utils/aiValidator');
+
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'studyverse_secret_key_2026';
+const JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || JWT_SECRET;
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'studyverse_refresh_secret_key_2026';
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 25 * 1024 * 1024 },
@@ -22,6 +35,289 @@ app.use(express.json());
 // Helper to generate UUIDs
 function generateUUID() {
   return require('crypto').randomUUID();
+}
+
+/**
+ * Helper to run Codex thread without artificial timeout abort (unless timeoutMs > 0).
+ */
+async function runCodexWithTimeout(thread, prompt, turnOptions = {}, timeoutMs = 0) {
+  if (!timeoutMs || timeoutMs <= 0) {
+    return await thread.run(prompt, turnOptions);
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => {
+    controller.abort();
+  }, timeoutMs);
+
+  try {
+    const turn = await thread.run(prompt, { ...turnOptions, signal: controller.signal });
+    return turn;
+  } catch (error) {
+    if (
+      controller.signal.aborted ||
+      error.name === 'AbortError' ||
+      (error.message && error.message.toLowerCase().includes('abort'))
+    ) {
+      const timeoutError = new Error(`OpenAI request timed out`);
+      timeoutError.status = 504;
+      throw timeoutError;
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ── FAST FALLBACK GENERATORS (extracts real sentences from materials) ──
+function generateFallbackQuiz(subjectName, materials = []) {
+  const textSnippets = materials
+    .map(m => {
+      const txt = (m && m.summary) ? String(m.summary).trim() : ((m && m.extracted_text) ? String(m.extracted_text).trim() : '');
+      return txt;
+    })
+    .filter(Boolean)
+    .join(' ');
+
+  const sentences = textSnippets
+    .split(/(?<=[.!?])\s+/)
+    .map(s => s.trim())
+    .filter(s => s.length > 15 && s.length < 200);
+
+  if (sentences.length >= 3) {
+    const s1 = sentences[0];
+    const s2 = sentences[1];
+    const s3 = sentences[2];
+    const s4 = sentences[3] || sentences[0];
+    const s5 = sentences[4] || sentences[1];
+
+    return [
+      {
+        question_text: `Conform suportului de curs pentru "${subjectName}": care afirmație este corectă despre "${s1.slice(0, 60)}..."?`,
+        question_type: 'multiple_choice',
+        options: [
+          s1.slice(0, 60),
+          `Aspect neprecizat în suportul de curs`,
+          `Afirmație contrară teoriei prezentate`,
+          `Niciuna dintre variante`
+        ],
+        correct_answer: s1.slice(0, 60),
+        explanation: `Afirmația este extrasă direct din materialul de studiu.`
+      },
+      {
+        question_text: `Care dintre următoarele opțiuni este prezentată în documentele materiei "${subjectName}"?`,
+        question_type: 'multiple_choice',
+        options: [
+          s2.slice(0, 60),
+          `Aspecte nespecificate în suportul de curs`,
+          `Configurații generice exterioare`,
+          `Elemente secundare nedefinite`
+        ],
+        correct_answer: s2.slice(0, 60),
+        explanation: `Informația apare în suportul de curs al materiei.`
+      },
+      {
+        question_text: `Privind tema de curs: "${s3.slice(0, 60)}...", ce variantă este validă?`,
+        question_type: 'multiple_choice',
+        options: [
+          s3.slice(0, 60),
+          `Teorie necorelată cu domeniul`,
+          `Definiție aleatorie din alt curs`,
+          `Structură nedefinită`
+        ],
+        correct_answer: s3.slice(0, 60),
+        explanation: 'Fapt confirmat de materialele atașate materiei.'
+      },
+      {
+        question_text: `Identificați conceptul menționat în cursul de "${subjectName}":`,
+        question_type: 'multiple_choice',
+        options: [
+          s4.slice(0, 60),
+          `Teorie necorelată cu domeniul ${subjectName}`,
+          `Definiții aleatorii din alte discipline`,
+          `Structură neutilizată în suportul didactic`
+        ],
+        correct_answer: s4.slice(0, 60),
+        explanation: 'Opțiunea corectă provine direct din notele de curs.'
+      },
+      {
+        question_text: `Sinteza materiei "${subjectName}" evidențiază următoarea noțiune:`,
+        question_type: 'multiple_choice',
+        options: [
+          s5.slice(0, 60),
+          `Punct de vedere neacceptat în materie`,
+          `Ipoteză invalidă conform cursului`,
+          `Informație fără relevanță`
+        ],
+        correct_answer: s5.slice(0, 60),
+        explanation: 'Informația este extrasă din sinteza materialelor.'
+      }
+    ];
+  }
+
+  return [
+    {
+      question_text: `Care este scopul principal al parcurgerii materiei "${subjectName}"?`,
+      question_type: 'multiple_choice',
+      options: [
+        `Însușirea conceptelor din ${subjectName}`,
+        `Memorarea de date fără legătură cu tema`,
+        `Rularea de teste aleatorii`,
+        `Niciuna dintre variante`
+      ],
+      correct_answer: `Însușirea conceptelor din ${subjectName}`,
+      explanation: 'Scopul este înțelegerea și aplicarea cunoștințelor din materie.'
+    },
+    {
+      question_text: `Care este rolul evaluărilor la materia "${subjectName}"?`,
+      question_type: 'multiple_choice',
+      options: [
+        `Măsurarea gradului de înțelegere a noțiunilor`,
+        `Generarea de erori în parcurgerea capitolelor`,
+        `Omiterea suportului didactic`,
+        `Ignorarea tematicilor de studiu`
+      ],
+      correct_answer: `Măsurarea gradului de înțelegere a noțiunilor`,
+      explanation: 'Evaluarea măsoară nivelul de stăpânire a conceptelor.'
+    },
+    {
+      question_text: `Materialele atașate materiei "${subjectName}" oferă:`,
+      question_type: 'multiple_choice',
+      options: [
+        `Suport teoretic și practic structurat`,
+        `Date fără relevanță pedagogică`,
+        `Teme complet neasociate cursului`,
+        `Nicio resursă de studiu`
+      ],
+      correct_answer: `Suport teoretic și practic structurat`,
+      explanation: 'Suportul de curs oferă baza necesară pentru fixarea noțiunilor.'
+    },
+    {
+      question_text: `Identificați orientarea principală a cursului de "${subjectName}":`,
+      question_type: 'multiple_choice',
+      options: [
+        `Dezvoltarea competențelor în ${subjectName}`,
+        `Studierea unor domenii neafiliate`,
+        `Analiza unor date fără relevanță`,
+        `Proceduri generice neincluse`
+      ],
+      correct_answer: `Dezvoltarea competențelor în ${subjectName}`,
+      explanation: 'Fiecare modul vizează dezvoltarea cunoștințelor în domeniu.'
+    },
+    {
+      question_text: `Cum se recomandă parcurgerea materialelor la "${subjectName}"?`,
+      question_type: 'multiple_choice',
+      options: [
+        `Studiu sistematic al capitolelor și note de curs`,
+        `Citire aleatorie fără urmărirea tematicii`,
+        `Omiterea exemplelor practice`,
+        `Niciuna dintre variante`
+      ],
+      correct_answer: `Studiu sistematic al capitolelor și note de curs`,
+      explanation: 'Studiul sistematic garantează fixarea cunoștințelor.'
+    }
+  ];
+}
+
+function generateFallbackFlashcards(subjectName, materials = []) {
+  const textSnippets = materials
+    .map(m => {
+      const txt = (m && m.summary) ? String(m.summary).trim() : ((m && m.extracted_text) ? String(m.extracted_text).trim() : '');
+      return txt;
+    })
+    .filter(Boolean)
+    .join(' ');
+
+  const sentences = textSnippets
+    .split(/(?<=[.!?])\s+/)
+    .map(s => s.trim())
+    .filter(s => s.length > 15 && s.length < 200);
+
+  if (sentences.length >= 3) {
+    return [
+      {
+        question: `Ce precizează materialul cu privire la: "${sentences[0].slice(0, 80)}..."?`,
+        answer: sentences[0],
+        difficulty: 'easy'
+      },
+      {
+        question: `Explicați afirmația: "${sentences[1].slice(0, 80)}..."`,
+        answer: sentences[1],
+        difficulty: 'medium'
+      },
+      {
+        question: `Care este detaliul prezentat despre: "${sentences[2].slice(0, 80)}..."?`,
+        answer: sentences[2],
+        difficulty: 'easy'
+      },
+      {
+        question: `Cum se definește ideea din suportul de curs: "${(sentences[3] || sentences[0]).slice(0, 80)}..."?`,
+        answer: sentences[3] || sentences[0],
+        difficulty: 'medium'
+      },
+      {
+        question: `Care este concluzia privind: "${(sentences[4] || sentences[1]).slice(0, 80)}..."?`,
+        answer: sentences[4] || sentences[1],
+        difficulty: 'hard'
+      }
+    ];
+  }
+
+  return [
+    {
+      question: `Care este noțiunea principală abordată în materia "${subjectName}"?`,
+      answer: `Materia "${subjectName}" tratează concepte fundamentale și aplicații practice.`,
+      difficulty: 'easy'
+    },
+    {
+      question: `Cum trebuie parcurse materialele pentru materia "${subjectName}"?`,
+      answer: `Prin parcurgerea capitolelor de curs și fixarea termenilor cheie.`,
+      difficulty: 'medium'
+    },
+    {
+      question: `Care este obiectivul de studiu la "${subjectName}"?`,
+      answer: `Înțelegerea aprofundată a tematicii și aplicarea în exerciții.`,
+      difficulty: 'easy'
+    },
+    {
+      question: `Ce recomandare există pentru recapitulare la "${subjectName}"?`,
+      answer: `Revizuirea sintezelor și autoevaluarea prin quizz-uri.`,
+      difficulty: 'medium'
+    },
+    {
+      question: `Ce măsoară quizz-urile la materia "${subjectName}"?`,
+      answer: `Progresul de învățare și gradul de stăpânire a noțiunilor.`,
+      difficulty: 'hard'
+    }
+  ];
+}
+
+// Token Generators
+function generateAccessToken(user) {
+  return jwt.sign(
+    { id: user.id, email: user.email, username: user.username },
+    JWT_ACCESS_SECRET,
+    { expiresIn: '15m' }
+  );
+}
+
+async function generateRefreshToken(user) {
+  const refreshToken = jwt.sign(
+    { id: user.id, email: user.email, username: user.username },
+    JWT_REFRESH_SECRET,
+    { expiresIn: '30d' }
+  );
+
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + 30);
+
+  const id = generateUUID();
+  await db.query(
+    `INSERT INTO refresh_tokens (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)`,
+    [id, user.id, refreshToken, expiresAt.toISOString().slice(0, 19).replace('T', ' ')]
+  );
+
+  return refreshToken;
 }
 
 // Helper to map DB row boolean values
@@ -49,12 +345,24 @@ const authenticateToken = (req, res, next) => {
     return res.status(401).json({ error: 'Access token missing' });
   }
 
-  jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) {
-      return res.status(403).json({ error: 'Invalid or expired token' });
+  // Try verifying with JWT_ACCESS_SECRET first, fallback to JWT_SECRET for backward compatibility
+  jwt.verify(token, JWT_ACCESS_SECRET, (err, user) => {
+    if (!err) {
+      req.user = user;
+      return next();
     }
-    req.user = user;
-    next();
+
+    if (err.name === 'TokenExpiredError') {
+      return res.status(401).json({ error: 'Access token expired', code: 'TOKEN_EXPIRED' });
+    }
+
+    jwt.verify(token, JWT_SECRET, (fallbackErr, fallbackUser) => {
+      if (!fallbackErr) {
+        req.user = fallbackUser;
+        return next();
+      }
+      return res.status(403).json({ error: 'Invalid or expired token' });
+    });
   });
 };
 
@@ -99,11 +407,14 @@ app.post('/api/auth/signup', async (req, res) => {
       [generateUUID(), userId]
     );
 
-    const token = jwt.sign({ id: userId, email, username }, JWT_SECRET, { expiresIn: '30d' });
+    const userObj = { id: userId, email: email.trim().toLowerCase(), username: username.trim() };
+    const accessToken = generateAccessToken(userObj);
+    const refreshToken = await generateRefreshToken(userObj);
+
     const userProfile = await db.querySingle('SELECT id, email, username, avatar_url, crystal_balance, streak_days, longest_streak, consistency_multiplier, total_study_seconds, created_at FROM users WHERE id = ?', [userId]);
 
     res.status(201).json({
-      session: { access_token: token },
+      session: { access_token: accessToken, refresh_token: refreshToken },
       user: mapBools(userProfile, ['is_active'])
     });
   } catch (error) {
@@ -129,13 +440,15 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'Invalid login credentials' });
     }
 
-    const token = jwt.sign({ id: user.id, email: user.email, username: user.username }, JWT_SECRET, { expiresIn: '30d' });
-    
+    const userObj = { id: user.id, email: user.email, username: user.username };
+    const accessToken = generateAccessToken(userObj);
+    const refreshToken = await generateRefreshToken(userObj);
+
     // Remove password
     delete user.password;
 
     res.json({
-      session: { access_token: token },
+      session: { access_token: accessToken, refresh_token: refreshToken },
       user: mapBools(user, [])
     });
   } catch (error) {
@@ -143,6 +456,53 @@ app.post('/api/auth/login', async (req, res) => {
     res.status(500).json({ error: 'Authentication failed' });
   }
 });
+
+app.post('/api/auth/refresh', async (req, res) => {
+  const { refresh_token } = req.body;
+  if (!refresh_token) {
+    return res.status(400).json({ error: 'Refresh token is required' });
+  }
+
+  try {
+    const payload = jwt.verify(refresh_token, JWT_REFRESH_SECRET);
+
+    const stored = await db.querySingle(
+      'SELECT * FROM refresh_tokens WHERE user_id = ? AND token = ? AND expires_at > NOW()',
+      [payload.id, refresh_token]
+    );
+
+    if (!stored) {
+      return res.status(403).json({ error: 'Invalid or revoked refresh token' });
+    }
+
+    // Delete old refresh token (Token rotation)
+    await db.query('DELETE FROM refresh_tokens WHERE id = ?', [stored.id]);
+
+    const userObj = { id: payload.id, email: payload.email, username: payload.username };
+    const newAccessToken = generateAccessToken(userObj);
+    const newRefreshToken = await generateRefreshToken(userObj);
+
+    res.json({
+      access_token: newAccessToken,
+      refresh_token: newRefreshToken,
+    });
+  } catch (error) {
+    res.status(403).json({ error: 'Invalid or expired refresh token' });
+  }
+});
+
+app.post('/api/auth/logout', async (req, res) => {
+  const { refresh_token } = req.body;
+  if (refresh_token) {
+    try {
+      await db.query('DELETE FROM refresh_tokens WHERE token = ?', [refresh_token]);
+    } catch (e) {
+      console.error('Failed to revoke refresh token:', e.message);
+    }
+  }
+  res.json({ success: true });
+});
+
 
 app.post('/api/auth/reset-password', async (req, res) => {
   const { email } = req.body;
@@ -366,13 +726,13 @@ app.get('/api/materials', async (req, res) => {
 });
 
 app.post('/api/materials', async (req, res) => {
-  const { subject_id, chapter_id, user_id, name, file_url, file_type, size_bytes } = req.body;
+  const { subject_id, chapter_id, user_id, name, file_url, file_type, size_bytes, summary, extracted_text } = req.body;
   const id = generateUUID();
   try {
     await db.query(
-      `INSERT INTO materials (id, subject_id, chapter_id, user_id, name, file_url, file_type, size_bytes, is_summarized, embedding_done)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0)`,
-      [id, subject_id, chapter_id || null, user_id, name, file_url, file_type, size_bytes || 0]
+      `INSERT INTO materials (id, subject_id, chapter_id, user_id, name, file_url, file_type, size_bytes, summary, extracted_text, is_summarized, embedding_done)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+      [id, subject_id, chapter_id || null, user_id, name, file_url, file_type, size_bytes || 0, summary || null, extracted_text || null, summary ? 1 : 0]
     );
     const material = await db.querySingle('SELECT * FROM materials WHERE id = ?', [id]);
     res.json(mapBools(material, ['is_summarized', 'embedding_done']));
@@ -439,7 +799,7 @@ app.post('/api/materials/extract-text', upload.single('file'), async (req, res) 
   }
 });
 
-app.post('/api/materials/:id/summarize-file', upload.single('file'), async (req, res) => {
+app.post('/api/materials/:id/summarize-file', authenticateToken, upload.single('file'), async (req, res) => {
   const materialId = req.params.id;
 
   try {
@@ -464,24 +824,6 @@ app.post('/api/materials/:id/summarize-file', upload.single('file'), async (req,
     const fileName = req.file.originalname || material.name || 'uploaded file';
     let text = '';
 
-    console.log('[SUMMARIZE] START', {
-      materialId: material.id,
-      name: material.name,
-      subjectId: material.subject_id,
-      chapterId: material.chapter_id,
-      userId: material.user_id,
-      provider: 'codex-local',
-      at: new Date().toISOString(),
-    });
-
-    console.log('[SUMMARIZE] EXTRACT START', {
-      materialId: material.id,
-      name: fileName,
-      mimeType,
-      size: req.file.size,
-      at: new Date().toISOString(),
-    });
-
     if (mimeType.includes('pdf') || fileName.toLowerCase().endsWith('.pdf')) {
       const parsed = await pdfParse(req.file.buffer);
       text = parsed.text || '';
@@ -492,7 +834,7 @@ app.post('/api/materials/:id/summarize-file', upload.single('file'), async (req,
     ) {
       text = req.file.buffer.toString('utf8');
     } else {
-      throw new Error('Unsupported file type for summarization. Upload a text-based PDF or TXT/MD file.');
+      return res.status(400).json({ error: 'Unsupported file type for summarization. Upload a text-based PDF or TXT/MD file.' });
     }
 
     const cleaned = text
@@ -501,17 +843,13 @@ app.post('/api/materials/:id/summarize-file', upload.single('file'), async (req,
       .replace(/\n{3,}/g, '\n\n')
       .trim();
 
-    if (cleaned.replace(/\s/g, '').length < 200) {
-      throw new Error('Could not extract enough readable text from this file.');
+    if (cleaned.length > 25000) {
+      return res.status(413).json({ error: 'Payload too large: material content exceeds maximum limit (25,000 characters)' });
     }
 
-    console.log('[SUMMARIZE] EXTRACT FINISH', {
-      materialId: material.id,
-      name: fileName,
-      mimeType,
-      textLength: cleaned.length,
-      at: new Date().toISOString(),
-    });
+    if (cleaned.replace(/\s/g, '').length < 200) {
+      return res.status(400).json({ error: 'Could not extract enough readable text from this file.' });
+    }
 
     const summarySchema = {
       type: 'object',
@@ -531,56 +869,18 @@ Răspunde strict în JSON cu cheia "summary".
 Material:
 ${cleaned.slice(0, 12000)}`;
 
-    console.log('[SUMMARIZE] CODEX START', {
-      materialId: material.id,
-      promptLength: prompt.length,
-      at: new Date().toISOString(),
-    });
-
     const { Codex } = await import('@openai/codex-sdk');
-    const codex = new Codex();
+    const codex = new Codex({ apiKey: process.env.OPENAI_API_KEY });
     const thread = codex.startThread({ skipGitRepoCheck: true });
-    const turn = await thread.run(prompt, { outputSchema: summarySchema });
+    const turn = await runCodexWithTimeout(thread, prompt, { outputSchema: summarySchema });
 
-    const parsed = typeof turn.finalResponse === 'string'
-      ? JSON.parse(turn.finalResponse)
-      : turn.finalResponse;
-    const summary = parsed?.summary;
-
-    if (!summary || typeof summary !== 'string') {
-      throw new Error('Codex returned an invalid summary format.');
-    }
-
-    console.log('[SUMMARIZE] CODEX FINISH', {
-      materialId: material.id,
-      summaryLength: summary.length,
-      at: new Date().toISOString(),
-    });
-
-    console.log('[SUMMARIZE] SAVING', {
-      materialId: material.id,
-      name: material.name,
-      subjectId: material.subject_id,
-      chapterId: material.chapter_id,
-      userId: material.user_id,
-      summaryLength: summary.length,
-      at: new Date().toISOString(),
-    });
+    const validatedObj = validateSummary(turn.finalResponse);
+    const summary = validatedObj.summary;
 
     await db.query(
-      'UPDATE materials SET summary = ?, is_summarized = 1 WHERE id = ?',
-      [summary, material.id]
+      'UPDATE materials SET summary = ?, extracted_text = ?, is_summarized = 1 WHERE id = ?',
+      [summary, cleaned, material.id]
     );
-
-    console.log('[SUMMARIZE] FINISH', {
-      materialId: material.id,
-      name: material.name,
-      subjectId: material.subject_id,
-      chapterId: material.chapter_id,
-      userId: material.user_id,
-      provider: 'codex-local',
-      at: new Date().toISOString(),
-    });
 
     const updated = await db.querySingle('SELECT * FROM materials WHERE id = ?', [material.id]);
     res.json(mapBools(updated, ['is_summarized', 'embedding_done']));
@@ -590,9 +890,20 @@ ${cleaned.slice(0, 12000)}`;
       error: error.message,
       at: new Date().toISOString(),
     });
+
+    if (error.name === 'AIValidationError') {
+      return res.status(400).json({ error: error.message });
+    }
+    if (error.name === 'AIParseError') {
+      return res.status(422).json({ error: error.message });
+    }
+    if (error.message && error.message.includes('timeout')) {
+      return res.status(504).json({ error: 'OpenAI request timed out' });
+    }
     res.status(500).json({ error: error.message });
   }
 });
+
 
 app.post('/api/materials/:id/summarize-start', async (req, res) => {
   const materialId = req.params.id;
@@ -1164,7 +1475,7 @@ app.post('/api/flashcards', async (req, res) => {
 
 app.post('/api/flashcards/generate', authenticateToken, async (req, res) => {
   const userId = req.user.id;
-  const { subjectId, chapterId, count = 10 } = req.body;
+  const { subjectId, chapterId, count = 5 } = req.body;
 
   if (!subjectId) {
     return res.status(400).json({ error: 'subjectId is required' });
@@ -1181,44 +1492,36 @@ app.post('/api/flashcards/generate', authenticateToken, async (req, res) => {
     // Prefer summarized materials; fall back to all materials for the subject/chapter
     let materials;
     if (chapterId) {
-      materials = await db.query('SELECT name, summary FROM materials WHERE subject_id = ? AND chapter_id = ? AND is_summarized = 1', [subjectId, chapterId]);
-      if (materials.length === 0) {
-        materials = await db.query('SELECT name, summary FROM materials WHERE subject_id = ? AND chapter_id = ?', [subjectId, chapterId]);
-      }
+      materials = await db.query('SELECT name, summary, extracted_text FROM materials WHERE subject_id = ? AND chapter_id = ?', [subjectId, chapterId]);
     } else {
-      materials = await db.query('SELECT name, summary FROM materials WHERE subject_id = ? AND is_summarized = 1', [subjectId]);
-      if (materials.length === 0) {
-        materials = await db.query('SELECT name, summary FROM materials WHERE subject_id = ?', [subjectId]);
-      }
+      materials = await db.query('SELECT name, summary, extracted_text FROM materials WHERE subject_id = ?', [subjectId]);
     }
 
-    if (materials.length === 0) {
-      return res.status(400).json({ error: 'No materials found. Upload materials first.' });
-    }
+    console.log('[FLASHCARDS GENERATE] Materiale încărcate în context:', materials);
 
-    const chapterContext = chapters.length > 0
-      ? `\nCapitole: ${chapters.map(c => c.name).join(', ')}`
-      : '';
+    const validTexts = materials
+      .map(m => {
+        const txt = (m.summary && String(m.summary).trim()) || (m.extracted_text && String(m.extracted_text).trim());
+        return txt ? `Material (${m.name}):\n${txt}` : null;
+      })
+      .filter(Boolean);
 
-    const selectedChapter = chapterId
-      ? chapters.find(c => c.id === chapterId)
-      : null;
+    const hasRealText = validTexts.length > 0;
+    const context = hasRealText
+      ? validTexts.join('\n\n---\n\n').slice(0, 6000)
+      : `Materia: ${subject.name}\nDescriere: ${subject.description || 'Notite generale de curs'}`;
 
-    const materialContext = materials
-      .map(m => m.summary || m.name)
-      .join('\n\n---\n\n');
+    const prompt = `Ești un profesor expert. Generează exact ${count} flashcard-uri bazate pe fapte reale și concepte reale extrase strict din materialele de mai jos pentru materia "${subject.name}".
 
-    const prompt = `Ești un profesor expert. Pe baza materialelor de mai jos, generează exact ${count} flashcard-uri pentru subiectul "${subject.name}"${selectedChapter ? ` (capitolul: ${selectedChapter.name})` : ''}.${chapterContext}
+Context din documente (Materiale):
+${context}
 
-Materiale:
-${materialContext}
-
-Reguli:
+Reguli de grounding:
+- Fiecare flashcard trebuie să testeze informații reale prezentate în materiale
 - Întrebările trebuie să fie clare și concise
 - Răspunsurile trebuie să fie informative dar scurte (1-3 propoziții)
 - Distribuie dificultatea: ~30% easy, ~50% medium, ~20% hard
-- Acoperă cât mai multe concepte din materiale
-- Limba: aceeași limbă ca materialele`;
+- Limba: română`;
 
     const flashcardSchema = {
       type: 'object',
@@ -1241,24 +1544,20 @@ Reguli:
       additionalProperties: false,
     };
 
-    const { Codex } = await import('@openai/codex-sdk');
-    const codex = new Codex();
-    const thread = codex.startThread({ skipGitRepoCheck: true });
-
-    const turn = await thread.run(prompt, { outputSchema: flashcardSchema });
-
     let generated;
     try {
-      const parsed = typeof turn.finalResponse === 'string'
-        ? JSON.parse(turn.finalResponse)
-        : turn.finalResponse;
-      generated = parsed.flashcards || parsed;
-    } catch (parseErr) {
-      return res.status(500).json({ error: 'AI returned invalid format' });
-    }
+      const { Codex } = await import('@openai/codex-sdk');
+      const codex = new Codex({ apiKey: process.env.OPENAI_API_KEY });
+      const thread = codex.startThread({ skipGitRepoCheck: true });
 
-    if (!Array.isArray(generated)) {
-      return res.status(500).json({ error: 'AI returned invalid format' });
+      const aiPromise = runCodexWithTimeout(thread, prompt, { outputSchema: flashcardSchema, maxTokens: 1000, max_tokens: 1000 }, 0);
+      const raceTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('AI_RACE_TIMEOUT')), 30000));
+
+      const turn = await Promise.race([aiPromise, raceTimeout]);
+      generated = validateFlashcards(turn.finalResponse);
+    } catch (aiError) {
+      console.warn('[FLASHCARDS GENERATE] AI took >15s or errored. Serving fast fallback flashcards:', aiError.message);
+      generated = generateFallbackFlashcards(subject.name, materials);
     }
 
     // Save to DB
@@ -1277,10 +1576,19 @@ Reguli:
     res.json(createdCards);
   } catch (error) {
     console.error('[GENERATE] Error:', error.message);
-    console.error('[GENERATE] Stack:', error.stack);
+    if (error.name === 'AIValidationError') {
+      return res.status(400).json({ error: error.message });
+    }
+    if (error.name === 'AIParseError') {
+      return res.status(422).json({ error: error.message });
+    }
+    if (error.message && error.message.includes('timeout')) {
+      return res.status(504).json({ error: 'OpenAI request timed out' });
+    }
     res.status(500).json({ error: error.message });
   }
 });
+
 
 app.put('/api/flashcards/:id/status', async (req, res) => {
   const { review_status } = req.body;
@@ -1331,42 +1639,48 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
-app.post('/api/chat/respond', async (req, res) => {
+app.post('/api/chat/respond', authenticateToken, async (req, res) => {
   const { subject_id, message, history = [] } = req.body;
 
   if (!subject_id || !message || typeof message !== 'string') {
     return res.status(400).json({ error: 'subject_id and message are required' });
   }
 
-  const logBase = {
-    subjectId: subject_id,
-    messageLength: message.length,
-    at: new Date().toISOString(),
-  };
-
-  console.log('[AI_CHAT] START', logBase);
+  if (message.length > 25000) {
+    return res.status(413).json({ error: 'Payload too large: message content exceeds maximum limit (25,000 characters)' });
+  }
 
   try {
     const subject = await db.querySingle('SELECT * FROM subjects WHERE id = ?', [subject_id]);
     if (!subject) return res.status(404).json({ error: 'Subject not found' });
 
     const materials = await db.query(
-      'SELECT name, summary, is_summarized FROM materials WHERE subject_id = ? ORDER BY created_at ASC',
+      'SELECT id, name, summary, extracted_text, is_summarized FROM materials WHERE subject_id = ? ORDER BY created_at ASC',
       [subject_id]
     );
+
+    console.log('[CHAT RESPOND] Materiale încărcate în context:', materials);
+
     const chapters = await db.query(
       'SELECT name, description FROM chapters WHERE subject_id = ? ORDER BY order_index ASC, created_at ASC',
       [subject_id]
     );
 
-    const summaries = materials
-      .filter((m) => m.summary && String(m.summary).trim())
-      .map((m, index) => `Material ${index + 1}: ${m.name}\n${String(m.summary).trim()}`)
-      .join('\n\n');
+    const formattedMaterials = materials.map((m, index) => {
+      const textContent = (m.summary && String(m.summary).trim()) || (m.extracted_text && String(m.extracted_text).trim());
+      if (textContent) {
+        return `Material ${index + 1} (${m.name}):\n${textContent}`;
+      }
+      return `Material ${index + 1} (${m.name}): [Fișier încărcat, nesumarizat încă]`;
+    });
+
+    const documentContext = formattedMaterials.length > 0
+      ? formattedMaterials.join('\n\n---\n\n')
+      : 'Nu există materiale sau documente încărcate pentru această materie.';
 
     const chapterContext = chapters.length
       ? chapters.map((c, index) => `${index + 1}. ${c.name}${c.description ? ` - ${c.description}` : ''}`).join('\n')
-      : 'No chapters created yet.';
+      : 'Nu există capitole create încă.';
 
     const recentHistory = Array.isArray(history)
       ? history
@@ -1385,97 +1699,90 @@ app.post('/api/chat/respond', async (req, res) => {
       additionalProperties: false,
     };
 
-    const prompt = `Ești un asistent de studiu pentru materia "${subject.name}".
-Răspunde clar, util și concis în limba utilizatorului.
-Folosește în primul rând sumarizările materialelor. Dacă informația nu apare în materiale, spune asta explicit și oferă o explicație generală doar dacă este util.
-Nu inventa detalii specifice materialelor.
-Răspunde strict în JSON cu cheia "reply".
+    const prompt = `Ești un asistent de studiu inteligent și primitor pentru materia "${subject.name}".
 
 Descriere materie:
-${subject.description || 'No description'}
+${subject.description || 'Fără descriere'}
 
 Capitole:
 ${chapterContext}
 
-Sumarizări materiale:
-${summaries || 'No summarized materials available yet.'}
+Context din documente (Materiale încărcate):
+${documentContext}
 
-Istoric recent:
-${recentHistory || 'No previous messages.'}
+Istoric conversație recentă:
+${recentHistory || 'Fără mesaje anterioare.'}
 
 Întrebarea studentului:
-${message}`;
+${message}
 
-    console.log('[AI_CHAT] CODEX START', {
-      subjectId: subject_id,
-      promptLength: prompt.length,
-      summaryCount: materials.filter((m) => m.summary && String(m.summary).trim()).length,
-      at: new Date().toISOString(),
-    });
+Instrucțiuni de răspuns:
+1. Răspunde direct, clar și prietenos la întrebarea studentului.
+2. Dacă studentul pune o întrebare generală (ex: concepte de algoritmi, noțiuni teoretice, definiri de termeni, întrebări generale de programare/știință), răspunde direct și complet pe baza cunoștințelor tale generale de specialitate, FĂRĂ să afișezi nicio formulă rigidă sau avertisment de tipul "Nu am găsit detalii în materiale".
+3. Folosește informațiile din secțiunea "Context din documente" pentru a oferi detalii specifice cursului ori de câte ori sunt relevante.
+4. Precizează lipsa informațiilor din materiale (ex: "Nu am găsit detalii despre acest subiect în materialele încărcate pentru această materie.") DOAR DACĂ studentul întreabă EXPLICIT ceva legat de documente sau suportul de curs (de exemplu: "ce scrie în curs?", "ce zice profesorul la pagina X?", "apare acest subiect în documentele atașate?").
+5. Răspunde strict în format JSON conform schemei cu cheia "reply". Răspunsul trebuie să fie un text curat.`;
 
     const { Codex } = await import('@openai/codex-sdk');
-    const codex = new Codex();
+    const codex = new Codex({ apiKey: process.env.OPENAI_API_KEY });
     const thread = codex.startThread({ skipGitRepoCheck: true });
-    const turn = await thread.run(prompt.slice(0, 24000), { outputSchema: responseSchema });
-    const parsed = typeof turn.finalResponse === 'string'
-      ? JSON.parse(turn.finalResponse)
-      : turn.finalResponse;
-    const reply = parsed?.reply;
+    const turn = await runCodexWithTimeout(thread, prompt.slice(0, 24000), { outputSchema: responseSchema });
 
-    if (!reply || typeof reply !== 'string') {
-      throw new Error('Codex returned an invalid chat response format.');
-    }
-
-    console.log('[AI_CHAT] FINISH', {
-      subjectId: subject_id,
-      replyLength: reply.length,
-      at: new Date().toISOString(),
-    });
-
-    res.json({ reply, provider: 'codex-local' });
+    const validated = validateChatReply(turn.finalResponse);
+    return res.json({ reply: validated.reply, provider: 'openai' });
   } catch (error) {
-    console.error('[AI_CHAT] FAILED', {
-      subjectId: subject_id,
-      error: error.message,
-      at: new Date().toISOString(),
-    });
-    res.status(500).json({ error: error.message });
+    console.error('[CHAT RESPOND] Error:', error.message);
+    if (error.name === 'AIValidationError') {
+      return res.status(400).json({ error: error.message });
+    }
+    if (error.name === 'AIParseError') {
+      return res.status(422).json({ error: error.message });
+    }
+    if (error.status === 504 || (error.message && error.message.includes('timed out'))) {
+      return res.status(504).json({ error: error.message || 'OpenAI request timed out' });
+    }
+    return res.status(error.status || 500).json({ error: error.message || 'Internal server error' });
   }
 });
 
-app.post('/api/chat/explain-course', async (req, res) => {
+app.post('/api/chat/explain-course', authenticateToken, async (req, res) => {
   const { subject_id } = req.body;
 
   if (!subject_id) {
     return res.status(400).json({ error: 'subject_id is required' });
   }
 
-  console.log('[AI_CHAT_EXPLAIN] START', {
-    subjectId: subject_id,
-    at: new Date().toISOString(),
-  });
-
   try {
     const subject = await db.querySingle('SELECT * FROM subjects WHERE id = ?', [subject_id]);
     if (!subject) return res.status(404).json({ error: 'Subject not found' });
 
     const materials = await db.query(
-      'SELECT name, summary FROM materials WHERE subject_id = ? ORDER BY created_at ASC',
+      'SELECT id, name, summary, extracted_text, is_summarized FROM materials WHERE subject_id = ? ORDER BY created_at ASC',
       [subject_id]
     );
+
+    console.log('[CHAT EXPLAIN] Materiale încărcate în context:', materials);
+
     const chapters = await db.query(
       'SELECT name, description FROM chapters WHERE subject_id = ? ORDER BY order_index ASC, created_at ASC',
       [subject_id]
     );
 
-    const summaries = materials
-      .filter((m) => m.summary && String(m.summary).trim())
-      .map((m, index) => `Material ${index + 1}: ${m.name}\n${String(m.summary).trim()}`)
-      .join('\n\n');
+    const formattedMaterials = materials.map((m, index) => {
+      const textContent = (m.summary && String(m.summary).trim()) || (m.extracted_text && String(m.extracted_text).trim());
+      if (textContent) {
+        return `Material ${index + 1} (${m.name}):\n${textContent}`;
+      }
+      return `Material ${index + 1} (${m.name}): [Fișier încărcat, nesumarizat încă]`;
+    });
+
+    const documentContext = formattedMaterials.length > 0
+      ? formattedMaterials.join('\n\n---\n\n')
+      : 'Nu există materiale sau documente încărcate pentru această materie.';
 
     const chapterContext = chapters.length
       ? chapters.map((c, index) => `${index + 1}. ${c.name}${c.description ? ` - ${c.description}` : ''}`).join('\n')
-      : 'No chapters created yet.';
+      : 'Nu există capitole create încă.';
 
     const responseSchema = {
       type: 'object',
@@ -1487,56 +1794,43 @@ app.post('/api/chat/explain-course', async (req, res) => {
     };
 
     const prompt = `Ești un profesor care explică materia "${subject.name}".
-Construiește o explicație completă, structurată și ușor de urmărit, în română dacă materialele sau utilizatorul sunt în română.
-Folosește sumarizările materialelor ca sursă principală. Nu inventa detalii specifice care nu apar în materiale.
-Include: privire de ansamblu, concepte cheie, definiții importante, legături între concepte și un plan scurt de învățare.
-Răspunde strict în JSON cu cheia "explanation".
 
 Descriere materie:
-${subject.description || 'No description'}
+${subject.description || 'Fără descriere'}
 
 Capitole:
 ${chapterContext}
 
-Sumarizări materiale:
-${summaries || 'No summarized materials available yet.'}`;
+Context din documente (Materiale încărcate):
+${documentContext}
 
-    console.log('[AI_CHAT_EXPLAIN] CODEX START', {
-      subjectId: subject_id,
-      promptLength: prompt.length,
-      summaryCount: materials.filter((m) => m.summary && String(m.summary).trim()).length,
-      at: new Date().toISOString(),
-    });
+Instrucțiuni stricte de Grounding și explicație:
+1. Construiește o explicație structurată a cursului bazându-te pe informațiile din secțiunea "Context din documente".
+2. Dacă nu există materiale încărcate sau conținutul lor este indisponibil, precizează explicit acest lucru înainte de a oferi o privire de ansamblu generală.
+3. Răspunde strict în JSON cu cheia "explanation".`;
 
     const { Codex } = await import('@openai/codex-sdk');
-    const codex = new Codex();
+    const codex = new Codex({ apiKey: process.env.OPENAI_API_KEY });
     const thread = codex.startThread({ skipGitRepoCheck: true });
-    const turn = await thread.run(prompt.slice(0, 24000), { outputSchema: responseSchema });
-    const parsed = typeof turn.finalResponse === 'string'
-      ? JSON.parse(turn.finalResponse)
-      : turn.finalResponse;
-    const explanation = parsed?.explanation;
+    const turn = await runCodexWithTimeout(thread, prompt.slice(0, 24000), { outputSchema: responseSchema });
 
-    if (!explanation || typeof explanation !== 'string') {
-      throw new Error('Codex returned an invalid course explanation format.');
-    }
-
-    console.log('[AI_CHAT_EXPLAIN] FINISH', {
-      subjectId: subject_id,
-      explanationLength: explanation.length,
-      at: new Date().toISOString(),
-    });
-
-    res.json({ explanation, provider: 'codex-local' });
+    const validated = validateChatReply(turn.finalResponse);
+    return res.json({ explanation: validated.reply, provider: 'openai' });
   } catch (error) {
-    console.error('[AI_CHAT_EXPLAIN] FAILED', {
-      subjectId: subject_id,
-      error: error.message,
-      at: new Date().toISOString(),
-    });
-    res.status(500).json({ error: error.message });
+    console.error('[CHAT EXPLAIN] Error:', error.message);
+    if (error.name === 'AIValidationError') {
+      return res.status(400).json({ error: error.message });
+    }
+    if (error.name === 'AIParseError') {
+      return res.status(422).json({ error: error.message });
+    }
+    if (error.status === 504 || (error.message && error.message.includes('timed out'))) {
+      return res.status(504).json({ error: error.message || 'OpenAI request timed out' });
+    }
+    return res.status(error.status || 500).json({ error: error.message || 'Internal server error' });
   }
 });
+
 
 // ── QUIZZES ──────────────────────────────────────────────────
 
@@ -1599,43 +1893,52 @@ app.post('/api/quizzes/generate', authenticateToken, async (req, res) => {
     const subject = await db.querySingle('SELECT * FROM subjects WHERE id = ?', [subjectId]);
     if (!subject) return res.status(404).json({ error: 'Subject not found' });
 
-    // Get material context — prefer summarized, fall back to all
+    // Get material context — prefer summarized or extracted text
     let materials;
     if (chapterIds && chapterIds.length > 0) {
       const placeholders = chapterIds.map(() => '?').join(',');
       materials = await db.query(
-        `SELECT name, summary FROM materials WHERE subject_id = ? AND chapter_id IN (${placeholders}) AND is_summarized = 1`,
+        `SELECT name, summary, extracted_text FROM materials WHERE subject_id = ? AND chapter_id IN (${placeholders})`,
         [subjectId, ...chapterIds]
       );
-      if (materials.length === 0) {
-        materials = await db.query(
-          `SELECT name, summary FROM materials WHERE subject_id = ? AND chapter_id IN (${placeholders})`,
-          [subjectId, ...chapterIds]
-        );
-      }
     } else {
-      materials = await db.query('SELECT name, summary FROM materials WHERE subject_id = ? AND is_summarized = 1', [subjectId]);
-      if (materials.length === 0) {
-        materials = await db.query('SELECT name, summary FROM materials WHERE subject_id = ?', [subjectId]);
-      }
+      materials = await db.query('SELECT name, summary, extracted_text FROM materials WHERE subject_id = ?', [subjectId]);
     }
 
-    const context = materials.map(m => m.summary || m.name).join('\n\n---\n\n').slice(0, 10000);
-    if (!context.trim()) return res.status(400).json({ error: 'No materials found. Upload materials first.' });
+    console.log('[QUIZ GENERATE] Materiale încărcate în context:', materials);
 
-    const prompt = `Ești un generator de quiz pentru "${subject.name}".
-Generează exact ${count} întrebări pe baza materialelor de mai jos.
-Materiale:
+    const validTexts = materials
+      .map(m => {
+        const txt = (m.summary && String(m.summary).trim()) || (m.extracted_text && String(m.extracted_text).trim());
+        return txt ? `Material (${m.name}):\n${txt}` : null;
+      })
+      .filter(Boolean);
+
+    const hasRealText = validTexts.length > 0;
+    const targetCount = Math.min(count || 5, 5);
+
+    const context = hasRealText
+      ? validTexts.join('\n\n---\n\n').slice(0, 6000)
+      : `Materia: ${subject.name}\nDescriere: ${subject.description || 'Notite generale de curs'}`;
+
+    const prompt = `Ești un profesor expert și generator de quiz-uri pentru materia "${subject.name}".
+
+Context din documente (Materiale încărcate):
 ${context}
 
-Reguli:
-- Folosește tipuri mixte: multiple_choice (cu 4 opțiuni), true_false, short_answer
-- Pentru multiple_choice: exact 4 opțiuni, correct_answer = una dintre ele
-- Pentru true_false: options = ["Adevărat","Fals"], correct_answer = unul dintre ele
-- Pentru short_answer: options = null, correct_answer = răspuns scurt (max 10 cuvinte)
-- Acoperă conceptele principale din materiale
-- explanation: 1-2 propoziții care explică DE CE răspunsul este corect
-- Limba: aceeași ca materialele`;
+INSTRUCȚIUNI STRICTE DE GROUNDING ȘI ADEVĂR:
+${hasRealText
+  ? `1. Generează strict ${targetCount} întrebări extrase EXCLUSIV din faptele, definițiile și conceptele REALE prezentate în secțiunea "Context din documente".
+2. Nu inventa informații exterioare sau speculații care nu se regăsesc în textul furnizat.
+3. Răspunsul corect și explicația trebuie să fie 100% fidele textului din materiale.`
+  : `1. Generează strict ${targetCount} întrebări fundamentale bazate pe materia "${subject.name}".`}
+
+Reguli de formatare STRICTE:
+- Toate întrebările TREBUIE să fie EXCLUSIV de tip 'multiple_choice' (grilă cu 4 variante de răspuns). NU folosi short_answer sau true_false.
+- Fiecare întrebare TREBUIE să aibă exact 4 opțiuni de răspuns în vectorul 'options'.
+- correct_answer: trebuie să fie exact unul dintre cele 4 string-uri prezente în vectorul 'options'.
+- explanation: o singură propoziție scurtă (sub 25 de cuvinte) bazată pe text.
+- Limba: română.`;
 
     const quizSchema = {
       type: 'object',
@@ -1646,8 +1949,8 @@ Reguli:
             type: 'object',
             properties: {
               question_text: { type: 'string' },
-              question_type: { type: 'string', enum: ['multiple_choice', 'true_false', 'short_answer'] },
-              options: { type: ['array', 'null'], items: { type: 'string' } },
+              question_type: { type: 'string', enum: ['multiple_choice'] },
+              options: { type: 'array', items: { type: 'string' } },
               correct_answer: { type: 'string' },
               explanation: { type: 'string' },
             },
@@ -1660,30 +1963,29 @@ Reguli:
       additionalProperties: false,
     };
 
-    const { Codex } = await import('@openai/codex-sdk');
-    const codex = new Codex();
-    const thread = codex.startThread({ skipGitRepoCheck: true });
-    const turn = await thread.run(prompt, { outputSchema: quizSchema });
-
-    let questions;
     try {
-      const parsed = typeof turn.finalResponse === 'string'
-        ? JSON.parse(turn.finalResponse)
-        : turn.finalResponse;
-      questions = parsed.questions || parsed;
-    } catch {
-      return res.status(500).json({ error: 'AI returned invalid format' });
-    }
+      const { Codex } = await import('@openai/codex-sdk');
+      const codex = new Codex({ apiKey: process.env.OPENAI_API_KEY });
+      const thread = codex.startThread({ skipGitRepoCheck: true });
 
-    if (!Array.isArray(questions) || questions.length === 0) {
-      return res.status(500).json({ error: 'AI returned no questions' });
-    }
+      const aiPromise = runCodexWithTimeout(thread, prompt, { outputSchema: quizSchema, maxTokens: 1000, max_tokens: 1000 }, 0);
+      const raceTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('AI_RACE_TIMEOUT')), 30000));
 
-    res.json(questions);
+      const turn = await Promise.race([aiPromise, raceTimeout]);
+      const questions = validateQuiz(turn.finalResponse);
+      return res.json(questions);
+    } catch (aiError) {
+      console.warn('[QUIZ GENERATE] AI took >15s or errored. Serving fast fallback quiz:', aiError.message);
+      const fallbackQuestions = generateFallbackQuiz(subject.name, materials);
+      return res.json(fallbackQuestions);
+    }
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('[QUIZ GENERATE] Error:', error.message);
+    const fallbackQuestions = generateFallbackQuiz('Materie de studiu', []);
+    return res.json(fallbackQuestions);
   }
 });
+
 
 app.post('/api/quizzes/:id/finalize', async (req, res) => {
   const quizId = req.params.id;
